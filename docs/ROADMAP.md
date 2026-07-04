@@ -3,34 +3,36 @@
 ## P0 - Operating Loop
 
 - Customer QR menu and cart
+- Customer language switch, item modifiers, item notes, image/allergen/spice display
 - Order submission with table context
-- Customer table order status, item status, and service request visibility
-- FOH table board, item confirmation, service requests, checkout
-- FOH checkout payment records and recent payment list
-- Kitchen read-only pending item board
-- Basic menu and table management
+- Customer table order status, item status, tax lines, and service request visibility
+- FOH table board, item confirmation, service requests, checkout, tips, discounts, and local refunds
+- FOH checkout payment records and recent payment list across configured payment methods
+- Kitchen read-only pending item board with station filtering
+- Menu and table management
 - Staff account management for roles, active access, and password resets
 - Basic management analytics for revenue, payments, orders, and top items
 - Prisma/PostgreSQL persistence for the P0 loop
 - Staff login and role-gated FOH, kitchen, and management routes
 - Durable print jobs with a demo printer-service poller
 - Management print queue review and order reprints
-- Store settings for receipt identity, tax, service charge, and FOH totals
+- Store settings for Canada/China market presets, languages, receipt identity, tax rules, enabled payment methods, tips, service charge, and FOH totals
 - Menu item stock, sold-out guard, and cancel restock behavior
 - Table CRUD, QR token rotation, and printable table cards
+- Lightweight operations management for suppliers, inventory adjustments, members, coupons, KDS devices, and audit logs
 
 ## P1 - Store Operations
 
-- Suppliers, purchase orders, stocktake, and inventory adjustment history
-- Members, coupons, points, customer profile
+- Purchase orders, supplier receiving, recipes/BOM costing, and stocktake workflow
+- Customer-facing members, coupons, points, feedback, and customer profile
 
 ## P2 - Platform And Scale
 
 - DEV multi-store onboarding
-- KDS device tokens, heartbeat, category routing
-- Stripe Hosted Checkout and reconciliation
+- KDS heartbeat, station authorization, and category routing enforcement
+- Stripe/Interac/WeChat Pay/Alipay Hosted Checkout and reconciliation
 - Deeper analytics dashboards and operational reporting
-- Audit history and operational reporting
+- Advanced audit history and operational reporting
 
 ## Build Rule
 

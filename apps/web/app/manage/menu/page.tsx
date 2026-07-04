@@ -18,7 +18,17 @@ type CategoryDraft = {
 type MenuItemDraft = {
   categoryId: string;
   name: string;
+  nameFr: string;
+  nameZh: string;
   description: string;
+  descriptionFr: string;
+  descriptionZh: string;
+  imageUrl: string;
+  allergens: string;
+  spiceLevel: string;
+  taxCategory: string;
+  kitchenStation: string;
+  modifierGroupsJson: string;
   price: string;
   isAvailable: boolean;
   stockQuantity: string;
@@ -51,7 +61,17 @@ function draftFromItem(item: MenuItem): MenuItemDraft {
   return {
     categoryId: item.categoryId,
     name: item.name,
+    nameFr: item.nameLocalized?.["fr-CA"] ?? "",
+    nameZh: item.nameLocalized?.["zh-CN"] ?? "",
     description: item.description ?? "",
+    descriptionFr: item.descriptionLocalized?.["fr-CA"] ?? "",
+    descriptionZh: item.descriptionLocalized?.["zh-CN"] ?? "",
+    imageUrl: item.imageUrl ?? "",
+    allergens: item.allergens.join(", "),
+    spiceLevel: String(item.spiceLevel),
+    taxCategory: item.taxCategory,
+    kitchenStation: item.kitchenStation,
+    modifierGroupsJson: JSON.stringify(item.modifierGroups, null, 2),
     price: dollarsFromCents(item.priceCents),
     isAvailable: item.isAvailable,
     stockQuantity:
@@ -92,7 +112,17 @@ export default function ManageMenuPage() {
   const [newCategorySort, setNewCategorySort] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [name, setName] = useState("");
+  const [nameFr, setNameFr] = useState("");
+  const [nameZh, setNameZh] = useState("");
   const [description, setDescription] = useState("");
+  const [descriptionFr, setDescriptionFr] = useState("");
+  const [descriptionZh, setDescriptionZh] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [allergens, setAllergens] = useState("");
+  const [spiceLevel, setSpiceLevel] = useState("0");
+  const [taxCategory, setTaxCategory] = useState("PREPARED_FOOD");
+  const [kitchenStation, setKitchenStation] = useState("HOT");
+  const [modifierGroupsJson, setModifierGroupsJson] = useState("[]");
   const [price, setPrice] = useState("12.00");
   const [stockQuantity, setStockQuantity] = useState("");
   const [lowStockThreshold, setLowStockThreshold] = useState("5");
@@ -150,7 +180,17 @@ export default function ManageMenuPage() {
       const existing = current[itemId] ?? {
         categoryId: "",
         name: "",
+        nameFr: "",
+        nameZh: "",
         description: "",
+        descriptionFr: "",
+        descriptionZh: "",
+        imageUrl: "",
+        allergens: "",
+        spiceLevel: "0",
+        taxCategory: "PREPARED_FOOD",
+        kitchenStation: "HOT",
+        modifierGroupsJson: "[]",
         price: "0.00",
         isAvailable: true,
         stockQuantity: "",
@@ -219,19 +259,47 @@ export default function ManageMenuPage() {
     event.preventDefault();
     setError(null);
     try {
+      const modifierGroups = JSON.parse(modifierGroupsJson || "[]");
       await apiFetch("/v1/manage/menu/items", {
         method: "POST",
         body: JSON.stringify({
           categoryId,
           name,
+          nameLocalized: {
+            "fr-CA": nameFr.trim() || null,
+            "zh-CN": nameZh.trim() || null,
+          },
           description: description.trim() || null,
+          descriptionLocalized: {
+            "fr-CA": descriptionFr.trim() || null,
+            "zh-CN": descriptionZh.trim() || null,
+          },
+          imageUrl: imageUrl.trim() || null,
+          allergens: allergens
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter(Boolean),
+          spiceLevel: Number(spiceLevel || 0),
+          taxCategory,
+          kitchenStation,
+          modifierGroups,
           priceCents: parsePriceCents(price),
           stockQuantity: parseOptionalStock(stockQuantity),
           lowStockThreshold: Number(lowStockThreshold || 0),
         }),
       });
       setName("");
+      setNameFr("");
+      setNameZh("");
       setDescription("");
+      setDescriptionFr("");
+      setDescriptionZh("");
+      setImageUrl("");
+      setAllergens("");
+      setSpiceLevel("0");
+      setTaxCategory("PREPARED_FOOD");
+      setKitchenStation("HOT");
+      setModifierGroupsJson("[]");
       setStockQuantity("");
       setLowStockThreshold("5");
       await refresh();
@@ -244,12 +312,30 @@ export default function ManageMenuPage() {
     const draft = itemDrafts[item.id] ?? draftFromItem(item);
     setError(null);
     try {
+      const modifierGroups = JSON.parse(draft.modifierGroupsJson || "[]");
       await apiFetch(`/v1/manage/menu/items/${item.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           categoryId: draft.categoryId,
           name: draft.name,
+          nameLocalized: {
+            "fr-CA": draft.nameFr.trim() || null,
+            "zh-CN": draft.nameZh.trim() || null,
+          },
           description: draft.description.trim() || null,
+          descriptionLocalized: {
+            "fr-CA": draft.descriptionFr.trim() || null,
+            "zh-CN": draft.descriptionZh.trim() || null,
+          },
+          imageUrl: draft.imageUrl.trim() || null,
+          allergens: draft.allergens
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter(Boolean),
+          spiceLevel: Number(draft.spiceLevel || 0),
+          taxCategory: draft.taxCategory,
+          kitchenStation: draft.kitchenStation,
+          modifierGroups,
           priceCents: parsePriceCents(draft.price),
           isAvailable: draft.isAvailable,
           stockQuantity: parseOptionalStock(draft.stockQuantity),
@@ -358,12 +444,101 @@ export default function ManageMenuPage() {
                 />
               </label>
             </div>
+            <div className="grid two">
+              <label className="field">
+                <span>French name</span>
+                <input
+                  className="input"
+                  value={nameFr}
+                  onChange={(event) => setNameFr(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Chinese name</span>
+                <input
+                  className="input"
+                  value={nameZh}
+                  onChange={(event) => setNameZh(event.target.value)}
+                />
+              </label>
+            </div>
             <label className="field">
               <span>Description</span>
               <textarea
                 className="input textarea"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
+              />
+            </label>
+            <div className="grid two">
+              <label className="field">
+                <span>French description</span>
+                <textarea
+                  className="input textarea"
+                  value={descriptionFr}
+                  onChange={(event) => setDescriptionFr(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Chinese description</span>
+                <textarea
+                  className="input textarea"
+                  value={descriptionZh}
+                  onChange={(event) => setDescriptionZh(event.target.value)}
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>Image URL</span>
+              <input
+                className="input"
+                value={imageUrl}
+                placeholder="https://..."
+                onChange={(event) => setImageUrl(event.target.value)}
+              />
+            </label>
+            <div className="grid three">
+              <label className="field">
+                <span>Kitchen station</span>
+                <input
+                  className="input"
+                  value={kitchenStation}
+                  onChange={(event) => setKitchenStation(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Tax category</span>
+                <input
+                  className="input"
+                  value={taxCategory}
+                  onChange={(event) => setTaxCategory(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Spice level</span>
+                <input
+                  className="input"
+                  value={spiceLevel}
+                  inputMode="numeric"
+                  onChange={(event) => setSpiceLevel(event.target.value)}
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>Allergens</span>
+              <input
+                className="input"
+                value={allergens}
+                placeholder="Wheat, soy, sesame"
+                onChange={(event) => setAllergens(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Modifier groups JSON</span>
+              <textarea
+                className="input textarea mono"
+                value={modifierGroupsJson}
+                onChange={(event) => setModifierGroupsJson(event.target.value)}
               />
             </label>
             <div className="grid two">
@@ -447,8 +622,17 @@ export default function ManageMenuPage() {
                     const draft = itemDrafts[item.id] ?? draftFromItem(item);
                     return (
                       <div className="list-item menu-item-editor" key={item.id}>
-                        <div className="row between">
-                          <div>
+                        <div className="menu-item-summary">
+                          {item.imageUrl ? (
+                            <img
+                              className="menu-thumb"
+                              src={item.imageUrl}
+                              alt=""
+                            />
+                          ) : (
+                            <div className="menu-thumb placeholder" />
+                          )}
+                          <div className="grid">
                             <strong>{item.name}</strong>
                             <p>{item.description}</p>
                             <div className="row">
@@ -462,6 +646,18 @@ export default function ManageMenuPage() {
                                   data?.store.locale,
                                 )}
                               </span>
+                              <span className="meta">
+                                Station {item.kitchenStation}
+                              </span>
+                              <span className="meta">{item.taxCategory}</span>
+                              <span className="meta">
+                                {item.modifierGroups.length} modifier groups
+                              </span>
+                              {item.allergens.length ? (
+                                <span className="meta">
+                                  Allergens: {item.allergens.join(", ")}
+                                </span>
+                              ) : null}
                             </div>
                           </div>
                         </div>
@@ -564,6 +760,94 @@ export default function ManageMenuPage() {
                           </label>
                         </div>
 
+                        <div className="menu-item-controls secondary">
+                          <label className="field">
+                            <span>French name</span>
+                            <input
+                              className="input"
+                              value={draft.nameFr}
+                              onChange={(event) =>
+                                updateItemDraft(item.id, {
+                                  nameFr: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Chinese name</span>
+                            <input
+                              className="input"
+                              value={draft.nameZh}
+                              onChange={(event) =>
+                                updateItemDraft(item.id, {
+                                  nameZh: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Image URL</span>
+                            <input
+                              className="input"
+                              value={draft.imageUrl}
+                              onChange={(event) =>
+                                updateItemDraft(item.id, {
+                                  imageUrl: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Station</span>
+                            <input
+                              className="input"
+                              value={draft.kitchenStation}
+                              onChange={(event) =>
+                                updateItemDraft(item.id, {
+                                  kitchenStation: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Tax category</span>
+                            <input
+                              className="input"
+                              value={draft.taxCategory}
+                              onChange={(event) =>
+                                updateItemDraft(item.id, {
+                                  taxCategory: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Spice</span>
+                            <input
+                              className="input"
+                              value={draft.spiceLevel}
+                              inputMode="numeric"
+                              onChange={(event) =>
+                                updateItemDraft(item.id, {
+                                  spiceLevel: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Allergens</span>
+                            <input
+                              className="input"
+                              value={draft.allergens}
+                              onChange={(event) =>
+                                updateItemDraft(item.id, {
+                                  allergens: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+
                         <label className="field">
                           <span>Description</span>
                           <textarea
@@ -572,6 +856,44 @@ export default function ManageMenuPage() {
                             onChange={(event) =>
                               updateItemDraft(item.id, {
                                 description: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <div className="grid two">
+                          <label className="field">
+                            <span>French description</span>
+                            <textarea
+                              className="input textarea"
+                              value={draft.descriptionFr}
+                              onChange={(event) =>
+                                updateItemDraft(item.id, {
+                                  descriptionFr: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Chinese description</span>
+                            <textarea
+                              className="input textarea"
+                              value={draft.descriptionZh}
+                              onChange={(event) =>
+                                updateItemDraft(item.id, {
+                                  descriptionZh: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+                        <label className="field">
+                          <span>Modifier groups JSON</span>
+                          <textarea
+                            className="input textarea mono"
+                            value={draft.modifierGroupsJson}
+                            onChange={(event) =>
+                              updateItemDraft(item.id, {
+                                modifierGroupsJson: event.target.value,
                               })
                             }
                           />

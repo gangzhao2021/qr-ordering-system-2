@@ -4,56 +4,120 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type {
   CustomerOrder,
+  LanguageCode,
   MenuItem,
   PublicMenuResponse,
   PublicOrdersResponse,
+  SelectedModifier,
   ServiceRequest,
   ServiceRequestType,
 } from "@qr2/shared";
-import { formatCents } from "@qr2/shared";
+import { LANGUAGE_CODES, formatCents } from "@qr2/shared";
 import { apiFetch } from "../../lib/api";
 
 type CartLine = {
   menuItemId: string;
   name: string;
   priceCents: number;
-  stockQuantity?: number | null;
+  modifiers: SelectedModifier[];
+  note: string;
   quantity: number;
 };
 
-function upsertCart(cart: CartLine[], item: MenuItem) {
-  if (item.isSoldOut) return cart;
-  const maxQuantity = Math.min(20, item.stockQuantity ?? 20);
-  const existing = cart.find((line) => line.menuItemId === item.id);
-  if (existing) {
-    if (existing.quantity >= maxQuantity) return cart;
-    return cart.map((line) =>
-      line.menuItemId === item.id
-        ? { ...line, quantity: line.quantity + 1 }
-        : line,
-    );
-  }
-  return [
-    ...cart,
-    {
-      menuItemId: item.id,
-      name: item.name,
-      priceCents: item.priceCents,
-      stockQuantity: item.stockQuantity,
-      quantity: 1,
-    },
-  ];
+const labels = {
+  en: {
+    entryTitle: "Customer entry",
+    entryBody:
+      "Scan a table QR code or enter a table token to open the right dine-in menu.",
+    openMenu: "Open menu",
+    search: "Search menu",
+    water: "Water",
+    callStaff: "Call staff",
+    followUp: "Follow up",
+    tableStatus: "Table status",
+    serviceRequests: "Service requests",
+    orders: "Orders",
+    refresh: "Refresh",
+    add: "Add",
+    sendOrder: "Send order",
+    clear: "Clear",
+    note: "Kitchen note",
+    language: "Language",
+    openTotal: "Open total",
+    soldOut: "Sold out",
+    unavailable: "Unavailable",
+    available: "Available",
+  },
+  "fr-CA": {
+    entryTitle: "Entree client",
+    entryBody: "Scannez le code QR de la table ou entrez un jeton de table.",
+    openMenu: "Ouvrir le menu",
+    search: "Rechercher",
+    water: "Eau",
+    callStaff: "Appeler",
+    followUp: "Relancer",
+    tableStatus: "Etat de la table",
+    serviceRequests: "Demandes",
+    orders: "Commandes",
+    refresh: "Actualiser",
+    add: "Ajouter",
+    sendOrder: "Envoyer",
+    clear: "Vider",
+    note: "Note cuisine",
+    language: "Langue",
+    openTotal: "Total ouvert",
+    soldOut: "Epuise",
+    unavailable: "Indisponible",
+    available: "Disponible",
+  },
+  "zh-CN": {
+    entryTitle: "顾客入口",
+    entryBody: "扫描桌台二维码，或输入桌台 token 打开堂食菜单。",
+    openMenu: "打开菜单",
+    search: "搜索菜单",
+    water: "加水",
+    callStaff: "呼叫服务员",
+    followUp: "催单",
+    tableStatus: "桌台状态",
+    serviceRequests: "服务请求",
+    orders: "订单",
+    refresh: "刷新",
+    add: "加入",
+    sendOrder: "提交订单",
+    clear: "清空",
+    note: "口味备注",
+    language: "语言",
+    openTotal: "未结金额",
+    soldOut: "售罄",
+    unavailable: "不可售",
+    available: "可点",
+  },
+} as const;
+
+function localized(
+  base: string | null | undefined,
+  localizedValue: MenuItem["nameLocalized"],
+  language: LanguageCode,
+) {
+  return localizedValue?.[language] || localizedValue?.en || base || "";
 }
 
-function stockLabel(item: MenuItem) {
-  if (!item.isAvailable) return "Unavailable";
-  if (item.isSoldOut) return "Sold out";
+function modifierName(modifier: SelectedModifier) {
+  return modifier.priceDeltaCents
+    ? `${modifier.name} (${modifier.priceDeltaCents > 0 ? "+" : ""}${formatCents(modifier.priceDeltaCents)})`
+    : modifier.name;
+}
+
+function stockLabel(item: MenuItem, language: LanguageCode) {
+  const t = labels[language];
+  if (!item.isAvailable) return t.unavailable;
+  if (item.isSoldOut) return t.soldOut;
   if (item.stockQuantity !== null && item.stockQuantity !== undefined) {
     return item.isLowStock
       ? `${item.stockQuantity} left`
       : `${item.stockQuantity} in stock`;
   }
-  return "Available";
+  return t.available;
 }
 
 function orderStatusLabel(status: CustomerOrder["status"]) {
@@ -68,10 +132,14 @@ function itemStatusLabel(status: CustomerOrder["items"][number]["status"]) {
   return "Canceled";
 }
 
-function requestTypeLabel(type: ServiceRequest["type"]) {
-  if (type === "WATER") return "Water";
-  if (type === "CALL_STAFF") return "Call staff";
-  return "Follow up";
+function requestTypeLabel(
+  type: ServiceRequest["type"],
+  language: LanguageCode,
+) {
+  const t = labels[language];
+  if (type === "WATER") return t.water;
+  if (type === "CALL_STAFF") return t.callStaff;
+  return t.followUp;
 }
 
 function requestStatusLabel(status: ServiceRequest["status"]) {
@@ -84,14 +152,20 @@ function CustomerExperience() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const qrToken = searchParams.get("t") ?? "";
+  const [language, setLanguage] = useState<LanguageCode>("en");
   const [manualToken, setManualToken] = useState("table-1-token");
   const [menu, setMenu] = useState<PublicMenuResponse | null>(null);
   const [orders, setOrders] = useState<PublicOrdersResponse | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [query, setQuery] = useState("");
+  const [modifierDrafts, setModifierDrafts] = useState<
+    Record<string, Record<string, string[]>>
+  >({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const t = labels[language];
 
   async function loadCustomerData(token: string) {
     const [menuResult, ordersResult] = await Promise.all([
@@ -115,6 +189,13 @@ function CustomerExperience() {
   }
 
   useEffect(() => {
+    const requestedLanguage = searchParams.get("lang");
+    if (LANGUAGE_CODES.includes(requestedLanguage as LanguageCode)) {
+      setLanguage(requestedLanguage as LanguageCode);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (!qrToken) return;
     setLoading(true);
     setError(null);
@@ -133,11 +214,103 @@ function CustomerExperience() {
       .map((category) => ({
         ...category,
         items: category.items.filter((item) =>
-          `${item.name} ${item.description ?? ""}`.toLowerCase().includes(q),
+          `${localized(item.name, item.nameLocalized, language)} ${localized(
+            item.description,
+            item.descriptionLocalized,
+            language,
+          )}`
+            .toLowerCase()
+            .includes(q),
         ),
       }))
       .filter((category) => category.items.length > 0);
-  }, [menu, query]);
+  }, [menu, query, language]);
+
+  function selectedModifiers(item: MenuItem): SelectedModifier[] {
+    const draft = modifierDrafts[item.id] ?? {};
+    return item.modifierGroups.flatMap((group) => {
+      const selectedIds =
+        draft[group.id] ??
+        group.options
+          .filter((option) => option.isDefault)
+          .map((option) => option.id);
+      return group.options
+        .filter((option) => selectedIds.includes(option.id))
+        .map((option) => ({
+          groupId: group.id,
+          optionId: option.id,
+          name: `${localized(group.name, group.nameLocalized, language)}: ${localized(
+            option.name,
+            option.nameLocalized,
+            language,
+          )}`,
+          priceDeltaCents: option.priceDeltaCents,
+        }));
+    });
+  }
+
+  function updateModifier(
+    item: MenuItem,
+    groupId: string,
+    optionId: string,
+    checked = true,
+  ) {
+    const group = item.modifierGroups.find((entry) => entry.id === groupId);
+    setModifierDrafts((current) => {
+      const itemDraft = current[item.id] ?? {};
+      if (!group || group.maxSelect <= 1) {
+        return {
+          ...current,
+          [item.id]: { ...itemDraft, [groupId]: [optionId] },
+        };
+      }
+      const existing = itemDraft[groupId] ?? [];
+      const next = checked
+        ? Array.from(new Set([...existing, optionId])).slice(0, group.maxSelect)
+        : existing.filter((id) => id !== optionId);
+      return { ...current, [item.id]: { ...itemDraft, [groupId]: next } };
+    });
+  }
+
+  function addToCart(item: MenuItem) {
+    if (item.isSoldOut) return;
+    const modifiers = selectedModifiers(item);
+    const note = notes[item.id]?.trim() ?? "";
+    const unitPrice =
+      item.priceCents +
+      modifiers.reduce((sum, modifier) => sum + modifier.priceDeltaCents, 0);
+    const key = `${item.id}|${modifiers
+      .map((modifier) => modifier.optionId)
+      .sort()
+      .join(",")}|${note}`;
+    setCart((current) => {
+      const existing = current.find(
+        (line) =>
+          `${line.menuItemId}|${line.modifiers
+            .map((modifier) => modifier.optionId)
+            .sort()
+            .join(",")}|${line.note}` === key,
+      );
+      const maxQuantity = Math.min(20, item.stockQuantity ?? 20);
+      if (existing) {
+        if (existing.quantity >= maxQuantity) return current;
+        return current.map((line) =>
+          line === existing ? { ...line, quantity: line.quantity + 1 } : line,
+        );
+      }
+      return [
+        ...current,
+        {
+          menuItemId: item.id,
+          name: localized(item.name, item.nameLocalized, language),
+          priceCents: unitPrice,
+          modifiers,
+          note,
+          quantity: 1,
+        },
+      ];
+    });
+  }
 
   const totalCents = cart.reduce(
     (sum, line) => sum + line.priceCents * line.quantity,
@@ -156,9 +329,12 @@ function CustomerExperience() {
           method: "POST",
           body: JSON.stringify({
             qrToken,
+            customerLanguage: language,
             items: cart.map((line) => ({
               menuItemId: line.menuItemId,
               quantity: line.quantity,
+              modifiers: line.modifiers,
+              note: line.note || null,
             })),
           }),
         },
@@ -196,11 +372,8 @@ function CustomerExperience() {
     return (
       <main className="page">
         <section className="page-header">
-          <h1>Customer entry</h1>
-          <p>
-            Scan a table QR code or enter a table token to open the right
-            dine-in menu.
-          </p>
+          <h1>{t.entryTitle}</h1>
+          <p>{t.entryBody}</p>
         </section>
         <section className="card grid">
           <label className="field">
@@ -218,7 +391,7 @@ function CustomerExperience() {
             }
             disabled={!manualToken.trim()}
           >
-            Open menu
+            {t.openMenu}
           </button>
         </section>
       </main>
@@ -239,7 +412,7 @@ function CustomerExperience() {
       <section className="card grid">
         <div className="row between">
           <label className="field" style={{ flex: 1, minWidth: 220 }}>
-            <span>Search menu</span>
+            <span>{t.search}</span>
             <input
               className="input"
               value={query}
@@ -247,24 +420,38 @@ function CustomerExperience() {
               placeholder="Noodles, dumplings, tea"
             />
           </label>
+          <label className="field">
+            <span>{t.language}</span>
+            <select
+              className="select"
+              value={language}
+              onChange={(event) =>
+                setLanguage(event.target.value as LanguageCode)
+              }
+            >
+              <option value="en">English</option>
+              <option value="fr-CA">Francais</option>
+              <option value="zh-CN">中文</option>
+            </select>
+          </label>
           <div className="row" aria-label="Service requests">
             <button
               className="btn ghost"
               onClick={() => void sendServiceRequest("WATER")}
             >
-              Water
+              {t.water}
             </button>
             <button
               className="btn ghost"
               onClick={() => void sendServiceRequest("CALL_STAFF")}
             >
-              Call staff
+              {t.callStaff}
             </button>
             <button
               className="btn ghost"
               onClick={() => void sendServiceRequest("FOLLOW_UP")}
             >
-              Follow up
+              {t.followUp}
             </button>
           </div>
         </div>
@@ -276,17 +463,17 @@ function CustomerExperience() {
         <section className="grid two order-status-grid">
           <article className="card grid">
             <div className="row between">
-              <h2>Table status</h2>
+              <h2>{t.tableStatus}</h2>
               <button
                 className="btn ghost"
                 onClick={() => void refreshOrders()}
                 disabled={loading}
               >
-                Refresh
+                {t.refresh}
               </button>
             </div>
             <div className="row between">
-              <span className="meta">Open total</span>
+              <span className="meta">{t.openTotal}</span>
               <strong>
                 {formatCents(
                   orders.openTotals.totalCents,
@@ -295,29 +482,38 @@ function CustomerExperience() {
                 )}
               </strong>
             </div>
-            <div className="row">
-              <span className="status ok">
-                {orders.orders.filter((order) => order.status === "SUBMITTED")
-                  .length || 0}{" "}
-                open
-              </span>
-              <span className="status">
-                {orders.serviceRequests.filter(
-                  (request) => request.status === "PENDING",
-                ).length || 0}{" "}
-                requests
-              </span>
-            </div>
+            {orders.openTotals.taxLines.length > 0 ? (
+              <div className="list compact-list">
+                {orders.openTotals.taxLines.map((line) => (
+                  <div className="row between" key={line.label}>
+                    <span className="meta">{line.label}</span>
+                    <span className="meta">
+                      {formatCents(
+                        line.amountCents,
+                        orders.store.currency,
+                        orders.store.locale,
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </article>
 
           <article className="card grid">
-            <h2>Service requests</h2>
+            <h2>{t.serviceRequests}</h2>
             <div className="list">
               {orders.serviceRequests.slice(0, 4).map((request) => (
                 <div className="list-item row between" key={request.id}>
-                  <span>{requestTypeLabel(request.type)}</span>
+                  <span>{requestTypeLabel(request.type, language)}</span>
                   <span
-                    className={`status ${request.status === "PENDING" ? "checkout" : request.status === "HANDLED" ? "ok" : ""}`}
+                    className={`status ${
+                      request.status === "PENDING"
+                        ? "checkout"
+                        : request.status === "HANDLED"
+                          ? "ok"
+                          : ""
+                    }`}
                   >
                     {requestStatusLabel(request.status)}
                   </span>
@@ -330,32 +526,51 @@ function CustomerExperience() {
           </article>
 
           <article className="card grid order-history">
-            <h2>Orders</h2>
+            <h2>{t.orders}</h2>
             <div className="list">
               {orders.orders.map((order) => (
                 <div className="list-item order-card" key={order.id}>
                   <div className="row between">
                     <strong>Order {order.id.slice(0, 8)}</strong>
                     <span
-                      className={`status ${order.status === "SUBMITTED" ? "checkout" : order.status === "CLOSED" ? "ok" : "urgent"}`}
+                      className={`status ${
+                        order.status === "SUBMITTED"
+                          ? "checkout"
+                          : order.status === "CLOSED"
+                            ? "ok"
+                            : "urgent"
+                      }`}
                     >
                       {orderStatusLabel(order.status)}
                     </span>
                   </div>
-                  <div className="meta">
-                    {new Date(order.submittedAt).toLocaleString()}
-                  </div>
                   <div className="list compact-list">
                     {order.items.map((item) => (
-                      <div className="row between" key={item.id}>
-                        <span>
-                          {item.quantity}x {item.nameSnapshot}
-                        </span>
-                        <span
-                          className={`status ${item.status === "PENDING" ? "checkout" : item.status === "DONE" ? "ok" : "urgent"}`}
-                        >
-                          {itemStatusLabel(item.status)}
-                        </span>
+                      <div className="grid compact-list" key={item.id}>
+                        <div className="row between">
+                          <span>
+                            {item.quantity}x {item.nameSnapshot}
+                          </span>
+                          <span
+                            className={`status ${
+                              item.status === "PENDING"
+                                ? "checkout"
+                                : item.status === "DONE"
+                                  ? "ok"
+                                  : "urgent"
+                            }`}
+                          >
+                            {itemStatusLabel(item.status)}
+                          </span>
+                        </div>
+                        {item.modifiers.length > 0 ? (
+                          <span className="meta">
+                            {item.modifiers.map(modifierName).join(" / ")}
+                          </span>
+                        ) : null}
+                        {item.note ? (
+                          <span className="meta">{item.note}</span>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -387,46 +602,187 @@ function CustomerExperience() {
               <span className="meta">{category.items.length} items</span>
             </div>
             <div className="list">
-              {category.items.map((item) => (
-                <div
-                  className={`list-item menu-item ${item.isSoldOut ? "muted-item" : ""}`}
-                  key={item.id}
-                >
-                  <div>
-                    <strong>{item.name}</strong>
-                    <p>{item.description}</p>
-                    <div className="row">
-                      <span className="meta">
-                        {formatCents(
-                          item.priceCents,
-                          menu?.store.currency,
-                          menu?.store.locale,
-                        )}
-                      </span>
-                      <span
-                        className={`status ${item.isSoldOut ? "urgent" : item.isLowStock ? "checkout" : "ok"}`}
-                      >
-                        {stockLabel(item)}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    className="btn"
-                    onClick={() =>
-                      setCart((current) => upsertCart(current, item))
-                    }
-                    disabled={
-                      item.isSoldOut ||
-                      (item.stockQuantity !== null &&
-                        item.stockQuantity !== undefined &&
-                        (cart.find((line) => line.menuItemId === item.id)
-                          ?.quantity ?? 0) >= item.stockQuantity)
-                    }
+              {category.items.map((item) => {
+                const displayName = localized(
+                  item.name,
+                  item.nameLocalized,
+                  language,
+                );
+                const description = localized(
+                  item.description,
+                  item.descriptionLocalized,
+                  language,
+                );
+                const modifiers = selectedModifiers(item);
+                const modifierTotal = modifiers.reduce(
+                  (sum, modifier) => sum + modifier.priceDeltaCents,
+                  0,
+                );
+                return (
+                  <div
+                    className={`list-item menu-item ${item.isSoldOut ? "muted-item" : ""}`}
+                    key={item.id}
                   >
-                    {item.isSoldOut ? "Sold out" : "Add"}
-                  </button>
-                </div>
-              ))}
+                    {item.imageUrl ? (
+                      <img className="menu-thumb" src={item.imageUrl} alt="" />
+                    ) : (
+                      <div className="menu-thumb placeholder" />
+                    )}
+                    <div className="menu-item-body">
+                      <strong>{displayName}</strong>
+                      <p>{description}</p>
+                      <div className="row">
+                        <span className="meta">
+                          {formatCents(
+                            item.priceCents + modifierTotal,
+                            menu?.store.currency,
+                            menu?.store.locale,
+                          )}
+                        </span>
+                        <span
+                          className={`status ${
+                            item.isSoldOut
+                              ? "urgent"
+                              : item.isLowStock
+                                ? "checkout"
+                                : "ok"
+                          }`}
+                        >
+                          {stockLabel(item, language)}
+                        </span>
+                        {item.spiceLevel > 0 ? (
+                          <span className="status checkout">
+                            Spice {item.spiceLevel}/5
+                          </span>
+                        ) : null}
+                        {item.allergens.length > 0 ? (
+                          <span className="meta">
+                            Allergens: {item.allergens.join(", ")}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {item.modifierGroups.length > 0 ? (
+                        <div className="modifier-grid">
+                          {item.modifierGroups.map((group) => (
+                            <fieldset className="modifier-group" key={group.id}>
+                              <legend>
+                                {localized(
+                                  group.name,
+                                  group.nameLocalized,
+                                  language,
+                                )}
+                              </legend>
+                              {group.maxSelect <= 1 ? (
+                                <select
+                                  className="select"
+                                  value={
+                                    (modifierDrafts[item.id]?.[group.id] ??
+                                      group.options
+                                        .filter((option) => option.isDefault)
+                                        .map((option) => option.id))[0] ?? ""
+                                  }
+                                  onChange={(event) =>
+                                    updateModifier(
+                                      item,
+                                      group.id,
+                                      event.target.value,
+                                    )
+                                  }
+                                >
+                                  {!group.required ? (
+                                    <option value="">None</option>
+                                  ) : null}
+                                  {group.options.map((option) => (
+                                    <option value={option.id} key={option.id}>
+                                      {localized(
+                                        option.name,
+                                        option.nameLocalized,
+                                        language,
+                                      )}
+                                      {option.priceDeltaCents
+                                        ? ` ${formatCents(
+                                            option.priceDeltaCents,
+                                            menu?.store.currency,
+                                            menu?.store.locale,
+                                          )}`
+                                        : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <div className="row">
+                                  {group.options.map((option) => {
+                                    const checked = (
+                                      modifierDrafts[item.id]?.[group.id] ?? []
+                                    ).includes(option.id);
+                                    return (
+                                      <label
+                                        className="mini-check"
+                                        key={option.id}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={(event) =>
+                                            updateModifier(
+                                              item,
+                                              group.id,
+                                              option.id,
+                                              event.target.checked,
+                                            )
+                                          }
+                                        />
+                                        <span>
+                                          {localized(
+                                            option.name,
+                                            option.nameLocalized,
+                                            language,
+                                          )}
+                                        </span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </fieldset>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <label className="field">
+                        <span>{t.note}</span>
+                        <input
+                          className="input"
+                          value={notes[item.id] ?? ""}
+                          maxLength={200}
+                          onChange={(event) =>
+                            setNotes((current) => ({
+                              ...current,
+                              [item.id]: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                    <button
+                      className="btn"
+                      onClick={() => addToCart(item)}
+                      disabled={
+                        item.isSoldOut ||
+                        (item.stockQuantity !== null &&
+                          item.stockQuantity !== undefined &&
+                          (cart
+                            .filter((line) => line.menuItemId === item.id)
+                            .reduce((sum, line) => sum + line.quantity, 0) ??
+                            0) >= item.stockQuantity)
+                      }
+                    >
+                      {item.isSoldOut ? t.soldOut : t.add}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -434,28 +790,52 @@ function CustomerExperience() {
 
       {cart.length > 0 ? (
         <div className="cart-bar">
-          <div className="card row between">
-            <div>
-              <strong>{totalQuantity} items</strong>
-              <div className="meta">
-                {formatCents(
-                  totalCents,
-                  menu?.store.currency,
-                  menu?.store.locale,
-                )}
+          <div className="card grid">
+            <div className="row between">
+              <div>
+                <strong>{totalQuantity} items</strong>
+                <div className="meta">
+                  {formatCents(
+                    totalCents,
+                    menu?.store.currency,
+                    menu?.store.locale,
+                  )}
+                </div>
+              </div>
+              <div className="row">
+                <button className="btn ghost" onClick={() => setCart([])}>
+                  {t.clear}
+                </button>
+                <button
+                  className="btn primary"
+                  onClick={() => void submitOrder()}
+                  disabled={loading}
+                >
+                  {t.sendOrder}
+                </button>
               </div>
             </div>
-            <div className="row">
-              <button className="btn ghost" onClick={() => setCart([])}>
-                Clear
-              </button>
-              <button
-                className="btn primary"
-                onClick={() => void submitOrder()}
-                disabled={loading}
-              >
-                Send order
-              </button>
+            <div className="list compact-list">
+              {cart.map((line, index) => (
+                <div
+                  className="row between"
+                  key={`${line.menuItemId}-${index}`}
+                >
+                  <span>
+                    {line.quantity}x {line.name}
+                    {line.modifiers.length > 0
+                      ? ` / ${line.modifiers.map(modifierName).join(" / ")}`
+                      : ""}
+                  </span>
+                  <strong>
+                    {formatCents(
+                      line.priceCents * line.quantity,
+                      menu?.store.currency,
+                      menu?.store.locale,
+                    )}
+                  </strong>
+                </div>
+              ))}
             </div>
           </div>
         </div>

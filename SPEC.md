@@ -11,9 +11,11 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Enter via `/c?t=<qrToken>` or manual table token entry.
 - Browse store-branded menu by category.
 - Search menu items.
+- Switch customer menu language between English, Canadian French, and simplified Chinese when content is configured.
+- Select item modifiers and send kitchen notes.
 - Add available, in-stock items to cart.
 - Submit dine-in order for the current table.
-- View current table order status, item status, open total, and service request status.
+- View current table order status, item status, open total, tax lines, and service request status.
 - Send service requests: water, call staff, follow up.
 - Preserve table context while navigating customer flows.
 
@@ -23,23 +25,24 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Confirm physical dishes only after staff sees handoff.
 - Cancel order items when needed, restoring tracked stock.
 - Mark service requests handled.
-- Record payment and checkout a table when no pending dishes remain.
+- Record payment, tip, discount, checkout, and local refunds when no pending dishes remain.
 - Keep all live order mutations on FOH surfaces.
 
 ### Kitchen
 
-- Read pending kitchen items aggregated by item.
+- Read pending kitchen items aggregated by station and item.
 - Show waiting time and urgency.
 - Do not mutate live order state.
 
 ### Management
 
-- Manage basic menu categories/items, availability, and item-level stock.
+- Manage menu categories/items, localized content, images, allergens, spice level, modifier groups, kitchen station, tax category, availability, and item-level stock.
 - Create, edit, deactivate, and rotate QR tokens for tables.
 - Create, edit, deactivate, and reset passwords for staff accounts.
-- Configure store identity, receipt footer, tax, and service charge.
+- Configure store identity, Canada/China market settings, languages, receipt footer, tax rules, invoice instructions, enabled payment methods, tips, and service charge.
 - Provide QR entry links for customer preview.
 - Review print jobs and trigger reprints.
+- Manage suppliers, inventory adjustments, members, coupons, KDS device tokens, and audit history.
 
 ### Printer Service
 
@@ -48,12 +51,12 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 
 ## Later Phases
 
-- Stripe Hosted Checkout and refund reconciliation.
-- Membership, coupons, points, and feedback.
-- Suppliers, purchase orders, recipes, stocktake, and inventory adjustment audit.
-- Analytics and reporting.
+- Live Stripe/Interac/WeChat Pay/Alipay capture and reconciliation.
+- Customer-facing membership, coupon redemption, points, and feedback.
+- Purchase orders, recipes/BOM costing, stocktake, and supplier receiving.
+- Deeper analytics and reporting.
 - DEV multi-store onboarding and fleet operations.
-- KDS device-token binding and category routing.
+- KDS device heartbeat and category routing enforcement.
 
 ## Non-Negotiable Role Boundary
 

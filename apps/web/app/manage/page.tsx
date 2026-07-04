@@ -38,6 +38,11 @@ const links = [
     title: "Analytics",
     body: "Revenue, payments, orders, and top items.",
   },
+  {
+    href: "/manage/operations",
+    title: "Operations",
+    body: "Suppliers, stock movement, coupons, members, KDS devices, and audit logs.",
+  },
 ];
 
 export default function ManagePage() {

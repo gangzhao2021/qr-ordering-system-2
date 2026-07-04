@@ -340,9 +340,39 @@ textarea {
 
 .menu-item {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
+}
+
+.menu-item-body {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.menu-item-summary {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.menu-thumb {
+  display: block;
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f0f2ed;
+}
+
+.menu-thumb.placeholder {
+  background:
+    linear-gradient(135deg, #f0f2ed 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(135deg, transparent 75%, #f0f2ed 75%) 0 0 / 16px 16px,
+    #fafaf8;
 }
 
 .muted-item {
@@ -396,6 +426,63 @@ textarea {
   align-items: end;
 }
 
+.menu-item-controls.secondary {
+  grid-template-columns:
+    repeat(2, minmax(140px, 1fr)) minmax(180px, 1.4fr)
+    repeat(4, minmax(104px, 0.8fr));
+}
+
+.method-grid,
+.modifier-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.method-grid {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+
+.modifier-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.modifier-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.modifier-group legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mini-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.mini-check input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.mono {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .table-editor {
   display: grid;
   gap: 14px;
@@ -440,6 +527,14 @@ textarea {
   gap: 10px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.kitchen-filter {
+  min-width: 180px;
+}
+
+.operations-section {
+  margin-top: 16px;
 }
 
 .token-row {
@@ -570,9 +665,11 @@ textarea {
   }
 
   .menu-item,
+  .menu-item-summary,
   .inventory-controls,
   .category-editor-controls,
   .menu-item-controls,
+  .menu-item-controls.secondary,
   .checkout-controls,
   .table-controls,
   .staff-controls,

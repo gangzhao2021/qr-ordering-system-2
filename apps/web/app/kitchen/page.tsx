@@ -19,6 +19,7 @@ function waitMinutes(iso: string) {
 export default function KitchenPage() {
   const auth = useRequireRole(["DEV", "ADMIN", "KITCHEN"]);
   const [data, setData] = useState<KitchenPendingResponse | null>(null);
+  const [station, setStation] = useState("ALL");
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
@@ -39,6 +40,13 @@ export default function KitchenPage() {
     return () => window.clearInterval(interval);
   }, [auth.user]);
 
+  const stations = Array.from(
+    new Set((data?.items ?? []).map((item) => item.kitchenStation || "HOT")),
+  ).sort();
+  const items = (data?.items ?? []).filter(
+    (item) => station === "ALL" || item.kitchenStation === station,
+  );
+
   return (
     <AuthGate state={auth}>
       <main className="page">
@@ -54,22 +62,39 @@ export default function KitchenPage() {
           <button className="btn" onClick={() => void refresh()}>
             Refresh
           </button>
+          <label className="field kitchen-filter">
+            <span>Station</span>
+            <select
+              className="select"
+              value={station}
+              onChange={(event) => setStation(event.target.value)}
+            >
+              <option value="ALL">All</option>
+              {stations.map((value) => (
+                <option value={value} key={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
           {error ? <span className="error status">{error}</span> : null}
         </div>
         <section className="grid" style={{ marginTop: 16 }}>
-          {(data?.items ?? []).length === 0 ? (
+          {items.length === 0 ? (
             <div className="card">
               <p>No pending items.</p>
             </div>
           ) : null}
-          {(data?.items ?? []).map((item) => {
+          {items.map((item) => {
             const minutes = waitMinutes(item.earliestSubmittedAt);
             const urgent = minutes >= 15;
             return (
               <article className="card row between" key={item.menuItemId}>
                 <div>
                   <h2>{item.name}</h2>
-                  <p>{item.quantity} pending</p>
+                  <p>
+                    {item.quantity} pending / {item.kitchenStation}
+                  </p>
                 </div>
                 <span className={urgent ? "status urgent" : "status ok"}>
                   {minutes} min

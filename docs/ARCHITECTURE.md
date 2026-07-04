@@ -31,7 +31,7 @@ Management exposes the same recent print queue through `/v1/manage/print-jobs` a
 
 ## Store Settings And Totals
 
-The default store owns currency, locale, timezone, receipt identity, tax rate, and service charge rate. FOH totals and order ticket payloads share one calculation: subtotal from non-canceled order items, service charge on subtotal, then tax on subtotal plus service charge.
+The default store owns market, region, currency, locale, timezone, supported languages, receipt identity, tax rules, invoice instructions, enabled payment methods, tip behavior, and service charge rate. FOH totals and order ticket payloads share one calculation: subtotal from non-canceled order items, service charge on subtotal, then tax from configured rules. Canada-style multiple tax rules and China-style price-includes-tax behavior are represented in store settings; legal filing and gateway reconciliation remain outside P0.
 
 ## Customer Order Visibility
 
@@ -39,7 +39,7 @@ The public `/v1/public/orders` endpoint is scoped by table QR token and returns 
 
 ## Checkout And Payments
 
-FOH checkout closes all submitted orders for a table only when no order items are pending. If the table total is greater than zero, checkout creates a `Payment` record with method, amount, currency, optional reference, and the closed order ids. Recent payments are visible in the FOH workspace.
+FOH checkout closes all submitted orders for a table only when no order items are pending. If the table total is greater than zero, checkout creates a `Payment` record with method, amount, currency, optional reference, tip, discount, and the closed order ids. Recent payments are visible in the FOH workspace. Refunds update local payment status and write audit records; live third-party payment capture is intentionally not coupled to P0.
 
 ## Management Analytics
 
@@ -51,7 +51,15 @@ Menu item stock is stored directly on `MenuItem`. A `null` stock quantity means 
 
 ## Menu Management
 
-Management can create, rename, sort, and delete empty menu categories. Management can create and edit menu items, including category assignment, description, price, availability, stock settings, and sort order. Hard delete is limited to unused menu items because historical order items retain their menu item relation; items with order history should be marked unavailable instead.
+Management can create, rename, sort, and delete empty menu categories. Management can create and edit menu items, including category assignment, localized names/descriptions, image URL, allergens, spice level, tax category, kitchen station, modifier groups, description, price, availability, stock settings, and sort order. Hard delete is limited to unused menu items because historical order items retain their menu item relation; items with order history should be marked unavailable instead.
+
+Customer order items snapshot the selected modifier names, modifier price deltas, and item note. The order transaction validates selected modifiers against the current menu item definition and includes modifier deltas in totals and print ticket payloads.
+
+## Store Operations
+
+Management operations are lightweight transactional records in the API database: suppliers, inventory adjustments, members, coupons, KDS device tokens, and audit logs. Inventory adjustments update tracked `MenuItem.stockQuantity` and keep a recent adjustment history. Coupons and members are management records only in P0; customer redemption and points accrual are later workflow work.
+
+KDS device records provide token and station inventory for device setup. The current kitchen page is still staff-session based and read-only; device-token heartbeat and station authorization are later-phase hardening.
 
 ## Table Management
 

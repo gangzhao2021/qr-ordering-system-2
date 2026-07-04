@@ -56,8 +56,71 @@ export const PRINT_JOB_STATUSES = [
 ] as const;
 export type PrintJobStatus = (typeof PRINT_JOB_STATUSES)[number];
 
-export const PAYMENT_METHODS = ["CASH", "CARD", "OTHER"] as const;
+export const STORE_MARKETS = ["CANADA", "CHINA", "OTHER"] as const;
+export type StoreMarket = (typeof STORE_MARKETS)[number];
+
+export const LANGUAGE_CODES = ["en", "fr-CA", "zh-CN"] as const;
+export type LanguageCode = (typeof LANGUAGE_CODES)[number];
+
+export const PAYMENT_METHODS = [
+  "CASH",
+  "CARD",
+  "INTERAC",
+  "STRIPE",
+  "WECHAT_PAY",
+  "ALIPAY",
+  "UNIONPAY",
+  "GIFT_CARD",
+  "OTHER",
+] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS;
+export type PaymentMethodOption = PaymentMethod;
+
+export type LocalizedText = {
+  en?: string | null;
+  "fr-CA"?: string | null;
+  "zh-CN"?: string | null;
+};
+
+export type TaxRule = {
+  id: string;
+  label: string;
+  rateBps: number;
+  appliesTo: string;
+  compoundOnPrevious?: boolean;
+};
+
+export type TaxLine = {
+  label: string;
+  rateBps: number;
+  amountCents: number;
+};
+
+export type MenuModifierOption = {
+  id: string;
+  name: string;
+  nameLocalized?: LocalizedText | null;
+  priceDeltaCents: number;
+  isDefault?: boolean;
+};
+
+export type MenuModifierGroup = {
+  id: string;
+  name: string;
+  nameLocalized?: LocalizedText | null;
+  required: boolean;
+  minSelect: number;
+  maxSelect: number;
+  options: MenuModifierOption[];
+};
+
+export type SelectedModifier = {
+  groupId: string;
+  optionId: string;
+  name: string;
+  priceDeltaCents: number;
+};
 
 export type StoreSummary = {
   id: string;
@@ -68,12 +131,23 @@ export type StoreSummary = {
 };
 
 export type StoreSettings = StoreSummary & {
+  market: StoreMarket;
+  region?: string | null;
+  defaultLanguage: LanguageCode;
+  supportedLanguages: LanguageCode[];
   address?: string | null;
   phone?: string | null;
+  taxNumber?: string | null;
+  taxMode: "SINGLE" | "CANADA" | "CHINA";
+  priceIncludesTax: boolean;
+  taxRules: TaxRule[];
   taxLabel: string;
   taxRateBps: number;
   serviceChargeLabel: string;
   serviceChargeRateBps: number;
+  enabledPaymentMethods: PaymentMethodOption[];
+  invoiceInstructions?: string | null;
+  tipEnabled: boolean;
   receiptFooter?: string | null;
 };
 
@@ -85,15 +159,26 @@ export type UpdateStoreSettingsRequest = Partial<
   Pick<
     StoreSettings,
     | "name"
+    | "market"
+    | "region"
     | "currency"
     | "locale"
     | "timezone"
+    | "defaultLanguage"
+    | "supportedLanguages"
     | "address"
     | "phone"
+    | "taxNumber"
+    | "taxMode"
+    | "priceIncludesTax"
+    | "taxRules"
     | "taxLabel"
     | "taxRateBps"
     | "serviceChargeLabel"
     | "serviceChargeRateBps"
+    | "enabledPaymentMethods"
+    | "invoiceInstructions"
+    | "tipEnabled"
     | "receiptFooter"
   >
 >;
@@ -102,6 +187,8 @@ export type OrderTotals = {
   subtotalCents: number;
   serviceChargeCents: number;
   taxCents: number;
+  taxLines: TaxLine[];
+  includedTaxCents: number;
   totalCents: number;
   serviceChargeRateBps: number;
   taxRateBps: number;
@@ -175,7 +262,15 @@ export type MenuItem = {
   id: string;
   categoryId: string;
   name: string;
+  nameLocalized?: LocalizedText | null;
   description?: string | null;
+  descriptionLocalized?: LocalizedText | null;
+  imageUrl?: string | null;
+  allergens: string[];
+  spiceLevel: number;
+  taxCategory: string;
+  kitchenStation: string;
+  modifierGroups: MenuModifierGroup[];
   priceCents: number;
   isAvailable: boolean;
   stockQuantity?: number | null;
@@ -205,6 +300,9 @@ export type OrderItem = {
   menuItemId: string;
   nameSnapshot: string;
   priceCentsSnapshot: number;
+  modifierTotalCentsSnapshot: number;
+  modifiers: SelectedModifier[];
+  note?: string | null;
   quantity: number;
   status: OrderItemStatus;
   createdAt: string;
@@ -229,7 +327,9 @@ export type Payment = {
   tableId: string;
   tableNumber?: string | null;
   method: PaymentMethod;
+  status: "PAID" | "PARTIALLY_REFUNDED" | "REFUNDED";
   amountCents: number;
+  refundedCents: number;
   currency: string;
   reference?: string | null;
   note?: string | null;
@@ -239,10 +339,17 @@ export type Payment = {
 };
 
 export type CheckoutTableRequest = {
-  paymentMethod?: PaymentMethod;
+  paymentMethod?: PaymentMethodOption;
   amountCents?: number;
+  tipCents?: number;
+  discountCents?: number;
   reference?: string | null;
   note?: string | null;
+};
+
+export type RefundPaymentRequest = {
+  amountCents: number;
+  reason?: string | null;
 };
 
 export type CheckoutTableResponse = {
@@ -305,7 +412,11 @@ export type CreateOrderRequest = {
   items: Array<{
     menuItemId: string;
     quantity: number;
+    modifiers?: SelectedModifier[];
+    note?: string | null;
   }>;
+  customerLanguage?: LanguageCode;
+  customerName?: string | null;
 };
 
 export type CreateOrderResponse = {
@@ -315,7 +426,15 @@ export type CreateOrderResponse = {
 export type CreateMenuItemRequest = {
   categoryId: string;
   name: string;
+  nameLocalized?: LocalizedText | null;
   description?: string | null;
+  descriptionLocalized?: LocalizedText | null;
+  imageUrl?: string | null;
+  allergens?: string[];
+  spiceLevel?: number;
+  taxCategory?: string;
+  kitchenStation?: string;
+  modifierGroups?: MenuModifierGroup[];
   priceCents: number;
   isAvailable?: boolean;
   stockQuantity?: number | null;
@@ -359,6 +478,7 @@ export type FohTablesResponse = {
 export type KitchenPendingItem = {
   menuItemId: string;
   name: string;
+  kitchenStation: string;
   quantity: number;
   earliestSubmittedAt: string;
 };
@@ -409,6 +529,102 @@ export type ManageAnalyticsResponse = {
   dailyRevenue: AnalyticsDailyRevenue[];
   paymentMethods: AnalyticsPaymentMethod[];
   topItems: AnalyticsTopItem[];
+};
+
+export type Supplier = {
+  id: string;
+  name: string;
+  contactName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  notes?: string | null;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type InventoryAdjustment = {
+  id: string;
+  menuItemId: string;
+  menuItemName: string;
+  quantityDelta: number;
+  reason: string;
+  note?: string | null;
+  createdAt: string;
+};
+
+export type Member = {
+  id: string;
+  name?: string | null;
+  phone: string;
+  email?: string | null;
+  points: number;
+  createdAt: string;
+};
+
+export type Coupon = {
+  id: string;
+  code: string;
+  discountType: "PERCENT" | "AMOUNT";
+  discountValue: number;
+  isActive: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+};
+
+export type KdsDevice = {
+  id: string;
+  name: string;
+  station?: string | null;
+  token: string;
+  isActive: boolean;
+  lastSeenAt?: string | null;
+};
+
+export type AuditLog = {
+  id: string;
+  actorEmail?: string | null;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  createdAt: string;
+};
+
+export type ManageOperationsResponse = {
+  store: StoreSummary;
+  suppliers: Supplier[];
+  inventoryAdjustments: InventoryAdjustment[];
+  members: Member[];
+  coupons: Coupon[];
+  kdsDevices: KdsDevice[];
+  auditLogs: AuditLog[];
+};
+
+export type CreateSupplierRequest = Pick<
+  Supplier,
+  "name" | "contactName" | "phone" | "email" | "notes"
+>;
+
+export type CreateInventoryAdjustmentRequest = {
+  menuItemId: string;
+  quantityDelta: number;
+  reason: string;
+  note?: string | null;
+};
+
+export type CreateMemberRequest = Pick<Member, "name" | "phone" | "email"> & {
+  points?: number;
+};
+
+export type CreateCouponRequest = Pick<
+  Coupon,
+  "code" | "discountType" | "discountValue" | "isActive" | "startsAt" | "endsAt"
+>;
+
+export type CreateKdsDeviceRequest = Pick<
+  KdsDevice,
+  "name" | "station" | "isActive"
+> & {
+  token?: string;
 };
 
 export function formatCents(

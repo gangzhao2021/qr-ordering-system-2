@@ -29,6 +29,8 @@ type FohTable = FohTablesResponse["tables"][number];
 type CheckoutDraft = {
   paymentMethod: PaymentMethod;
   amount: string;
+  tip: string;
+  discount: string;
   reference: string;
   note: string;
 };
@@ -50,6 +52,7 @@ export default function FohPage() {
     Record<string, CheckoutDraft>
   >({});
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function refresh() {
@@ -73,6 +76,12 @@ export default function FohPage() {
 
   useEffect(() => {
     if (auth.user) void refresh();
+  }, [auth.user]);
+
+  useEffect(() => {
+    if (!auth.user) return;
+    const interval = window.setInterval(() => void refresh(), 10000);
+    return () => window.clearInterval(interval);
   }, [auth.user]);
 
   const stats = useMemo(() => {
@@ -115,6 +124,8 @@ export default function FohPage() {
       checkoutDrafts[table.table.id] ?? {
         paymentMethod: "CASH",
         amount: dollarsFromCents(table.openTotalCents),
+        tip: "0.00",
+        discount: "0.00",
         reference: "",
         note: "",
       }
@@ -137,10 +148,30 @@ export default function FohPage() {
         body: JSON.stringify({
           paymentMethod: draft.paymentMethod,
           amountCents: parsePriceCents(draft.amount),
+          tipCents: parsePriceCents(draft.tip || "0"),
+          discountCents: parsePriceCents(draft.discount || "0"),
           reference: draft.reference.trim() || null,
           note: draft.note.trim() || null,
         }),
       },
+    );
+    await refresh();
+  }
+
+  async function refund(paymentId: string, remainingCents: number) {
+    const dollars = dollarsFromCents(remainingCents);
+    const value = window.prompt("Refund amount", dollars);
+    if (!value) return;
+    const amountCents = parsePriceCents(value);
+    await apiFetch(`/v1/foh/payments/${encodeURIComponent(paymentId)}/refund`, {
+      method: "POST",
+      body: JSON.stringify({
+        amountCents,
+        reason: "FOH refund",
+      }),
+    });
+    setNotice(
+      `Refund recorded: ${formatCents(amountCents, paymentData?.store.currency, paymentData?.store.locale)}`,
     );
     await refresh();
   }
@@ -198,6 +229,7 @@ export default function FohPage() {
             Refresh
           </button>
           {error ? <span className="error status">{error}</span> : null}
+          {notice ? <span className="success status">{notice}</span> : null}
         </div>
 
         <section className="card" style={{ marginTop: 16 }}>
@@ -251,14 +283,40 @@ export default function FohPage() {
                 <span>
                   Table {payment.tableNumber ?? "-"} / {payment.method}
                   {payment.reference ? ` / ${payment.reference}` : ""}
+                  {payment.status !== "PAID" ? ` / ${payment.status}` : ""}
                 </span>
-                <strong>
-                  {formatCents(
-                    payment.amountCents,
-                    paymentData?.store.currency,
-                    paymentData?.store.locale,
-                  )}
-                </strong>
+                <div className="row">
+                  <strong>
+                    {formatCents(
+                      payment.amountCents - payment.refundedCents,
+                      paymentData?.store.currency,
+                      paymentData?.store.locale,
+                    )}
+                  </strong>
+                  {payment.refundedCents > 0 ? (
+                    <span className="status urgent">
+                      refunded{" "}
+                      {formatCents(
+                        payment.refundedCents,
+                        paymentData?.store.currency,
+                        paymentData?.store.locale,
+                      )}
+                    </span>
+                  ) : null}
+                  {payment.amountCents > payment.refundedCents ? (
+                    <button
+                      className="btn ghost"
+                      onClick={() =>
+                        void refund(
+                          payment.id,
+                          payment.amountCents - payment.refundedCents,
+                        )
+                      }
+                    >
+                      Refund
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ))}
             {(paymentData?.payments ?? []).length === 0 ? (
@@ -439,6 +497,32 @@ export default function FohPage() {
                         onChange={(event) =>
                           updateCheckoutDraft(table, {
                             amount: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Tip</span>
+                      <input
+                        className="input"
+                        inputMode="decimal"
+                        value={payment.tip}
+                        onChange={(event) =>
+                          updateCheckoutDraft(table, {
+                            tip: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Discount</span>
+                      <input
+                        className="input"
+                        inputMode="decimal"
+                        value={payment.discount}
+                        onChange={(event) =>
+                          updateCheckoutDraft(table, {
+                            discount: event.target.value,
                           })
                         }
                       />

@@ -15,7 +15,17 @@ describe("shared role constants", () => {
 
 describe("payment constants", () => {
   it("supports the P0 checkout payment methods", () => {
-    expect(PAYMENT_METHODS).toEqual(["CASH", "CARD", "OTHER"]);
+    expect(PAYMENT_METHODS).toEqual([
+      "CASH",
+      "CARD",
+      "INTERAC",
+      "STRIPE",
+      "WECHAT_PAY",
+      "ALIPAY",
+      "UNIONPAY",
+      "GIFT_CARD",
+      "OTHER",
+    ]);
   });
 });
 

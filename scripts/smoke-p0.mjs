@@ -202,6 +202,8 @@ async function main() {
       cookie: foh.cookie,
       body: JSON.stringify({
         paymentMethod: "CARD",
+        tipCents: 100,
+        discountCents: 50,
         reference: marker,
         note: "P0 smoke checkout",
       }),
@@ -212,6 +214,21 @@ async function main() {
     "checkout did not close the created order",
   );
   assert(checkout.body.payment?.id, "checkout did not create a payment");
+  const refund = await request(
+    `/v1/foh/payments/${encodeURIComponent(checkout.body.payment.id)}/refund`,
+    {
+      method: "POST",
+      cookie: foh.cookie,
+      body: JSON.stringify({
+        amountCents: 1,
+        reason: "P0 smoke refund path",
+      }),
+    },
+  );
+  assert(
+    refund.body.status === "PARTIALLY_REFUNDED",
+    "payment refund did not update payment status",
+  );
 
   const payments = await request("/v1/foh/payments", { cookie: foh.cookie });
   assert(
@@ -219,6 +236,13 @@ async function main() {
       payment.orderIds.includes(orderId),
     ),
     "checkout payment missing from FOH payments",
+  );
+  assert(
+    payments.body.payments.some(
+      (payment) =>
+        payment.id === checkout.body.payment.id && payment.refundedCents >= 1,
+    ),
+    "refunded payment missing from FOH payments",
   );
 
   const reprint = await request(
@@ -238,6 +262,14 @@ async function main() {
   await request("/v1/manage/staff", { cookie: admin.cookie });
   await request("/v1/manage/store-settings", { cookie: admin.cookie });
   await request("/v1/manage/analytics?days=7", { cookie: admin.cookie });
+  const operations = await request("/v1/manage/operations", {
+    cookie: admin.cookie,
+  });
+  assert(
+    Array.isArray(operations.body.suppliers) &&
+      Array.isArray(operations.body.kdsDevices),
+    "management operations response missing seeded sections",
+  );
   const managePrintJobs = await request("/v1/manage/print-jobs", {
     cookie: admin.cookie,
   });

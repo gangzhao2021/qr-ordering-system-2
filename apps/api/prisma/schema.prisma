@@ -53,33 +53,57 @@ enum PrintJobStatus {
 enum PaymentMethod {
   CASH
   CARD
+  INTERAC
+  STRIPE
+  WECHAT_PAY
+  ALIPAY
+  UNIONPAY
+  GIFT_CARD
   OTHER
 }
 
 model Store {
   id                   String   @id @default(cuid())
   name                 String   @unique
+  market               String   @default("CANADA")
+  region               String?
   currency             String   @default("USD")
   locale               String   @default("en-US")
   timezone             String   @default("America/New_York")
+  defaultLanguage      String   @default("en")
+  supportedLanguages   Json     @default("[\"en\"]")
   address              String?
   phone                String?
+  taxNumber            String?
+  taxMode              String   @default("SINGLE")
+  priceIncludesTax     Boolean  @default(false)
+  taxRules             Json     @default("[]")
   taxLabel             String   @default("Tax")
   taxRateBps           Int      @default(0)
   serviceChargeLabel   String   @default("Service charge")
   serviceChargeRateBps Int      @default(0)
+  enabledPaymentMethods Json    @default("[\"CASH\",\"CARD\",\"OTHER\"]")
+  invoiceInstructions  String?
+  tipEnabled           Boolean  @default(true)
   receiptFooter        String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  tables          DiningTable[]
-  categories      MenuCategory[]
-  items           MenuItem[]
-  orders          Order[]
-  serviceRequests ServiceRequest[]
-  users           User[]
-  printJobs       PrintJob[]
-  payments        Payment[]
+  tables               DiningTable[]
+  categories           MenuCategory[]
+  items                MenuItem[]
+  orders               Order[]
+  serviceRequests      ServiceRequest[]
+  users                User[]
+  printJobs            PrintJob[]
+  payments             Payment[]
+  suppliers            Supplier[]
+  inventoryAdjustments InventoryAdjustment[]
+  members              Member[]
+  coupons              Coupon[]
+  kdsDevices           KdsDevice[]
+  auditLogs            AuditLog[]
+  feedback             Feedback[]
 }
 
 model User {
@@ -115,6 +139,7 @@ model DiningTable {
   serviceRequests ServiceRequest[]
   printJobs       PrintJob[]
   payments        Payment[]
+  feedback        Feedback[]
 
   @@unique([storeId, number])
   @@index([storeId])
@@ -140,7 +165,15 @@ model MenuItem {
   storeId           String
   categoryId        String
   name              String
+  nameLocalized     Json?
   description       String?
+  descriptionLocalized Json?
+  imageUrl          String?
+  allergens         Json     @default("[]")
+  spiceLevel        Int      @default(0)
+  taxCategory       String   @default("PREPARED_FOOD")
+  kitchenStation    String   @default("HOT")
+  modifierGroups    Json     @default("[]")
   priceCents        Int
   isAvailable       Boolean  @default(true)
   stockQuantity     Int?
@@ -152,6 +185,7 @@ model MenuItem {
   store      Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
   category   MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
+  inventoryAdjustments InventoryAdjustment[]
 
   @@index([storeId])
   @@index([categoryId])
@@ -208,7 +242,9 @@ model Payment {
   storeId     String
   tableId     String
   method      PaymentMethod @default(CASH)
+  status      String        @default("PAID")
   amountCents Int
+  refundedCents Int         @default(0)
   currency    String
   reference   String?
   note        String?
@@ -232,6 +268,9 @@ model OrderItem {
   menuItemId         String
   nameSnapshot       String
   priceCentsSnapshot Int
+  modifierTotalCentsSnapshot Int      @default(0)
+  modifiers          Json            @default("[]")
+  note               String?
   quantity           Int             @default(1)
   status             OrderItemStatus @default(PENDING)
   createdAt          DateTime        @default(now())
@@ -262,4 +301,120 @@ model ServiceRequest {
   @@index([storeId])
   @@index([tableId])
   @@index([status])
+}
+
+model Supplier {
+  id          String   @id @default(cuid())
+  storeId     String
+  name        String
+  contactName String?
+  phone       String?
+  email       String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@unique([storeId, name])
+}
+
+model InventoryAdjustment {
+  id            String   @id @default(cuid())
+  storeId       String
+  menuItemId    String
+  quantityDelta Int
+  reason        String
+  note          String?
+  createdAt     DateTime @default(now())
+
+  store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@index([storeId])
+  @@index([menuItemId])
+}
+
+model Member {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String?
+  phone     String
+  email     String?
+  points    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@unique([storeId, phone])
+}
+
+model Coupon {
+  id            String   @id @default(cuid())
+  storeId       String
+  code          String
+  discountType  String   @default("PERCENT")
+  discountValue Int
+  isActive      Boolean  @default(true)
+  startsAt      DateTime?
+  endsAt        DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@unique([storeId, code])
+}
+
+model KdsDevice {
+  id         String   @id @default(cuid())
+  storeId    String
+  name       String
+  station    String?
+  token      String   @unique
+  isActive   Boolean  @default(true)
+  lastSeenAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  storeId    String
+  actorId    String?
+  actorEmail String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([createdAt])
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  storeId   String
+  tableId   String?
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+
+  store Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  table DiningTable? @relation(fields: [tableId], references: [id], onDelete: SetNull)
+
+  @@index([storeId])
+  @@index([tableId])
 }

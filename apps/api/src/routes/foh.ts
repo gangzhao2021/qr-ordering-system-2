@@ -10,6 +10,7 @@ import {
   getFohPayments,
   getFohTables,
   getFohPrintJobs,
+  refundPayment,
   reprintOrder,
   updateOrderItemStatus,
   updateServiceRequestStatus,
@@ -85,11 +86,30 @@ fohRouter.post("/tables/:tableId/checkout", async (req, res, next) => {
       .object({
         paymentMethod: z.enum(PAYMENT_METHODS).optional(),
         amountCents: z.number().int().min(0).optional(),
+        tipCents: z.number().int().min(0).optional(),
+        discountCents: z.number().int().min(0).optional(),
         reference: z.string().trim().max(120).optional().nullable(),
         note: z.string().trim().max(300).optional().nullable(),
       })
       .parse(req.body ?? {});
     res.json(await checkoutTable(params.tableId, body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+fohRouter.post("/payments/:paymentId/refund", async (req, res, next) => {
+  try {
+    const params = z
+      .object({ paymentId: z.string().trim().min(1) })
+      .parse(req.params);
+    const body = z
+      .object({
+        amountCents: z.number().int().positive(),
+        reason: z.string().trim().max(300).optional().nullable(),
+      })
+      .parse(req.body ?? {});
+    res.json(await refundPayment(params.paymentId, body));
   } catch (error) {
     next(error);
   }

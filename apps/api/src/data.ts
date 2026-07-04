@@ -1,35 +1,55 @@
 import { randomBytes } from "node:crypto";
 import type {
+  AuditLog,
   CheckoutTableRequest,
   CheckoutTableResponse,
+  Coupon,
+  CreateCouponRequest,
   CreateDiningTableRequest,
+  CreateInventoryAdjustmentRequest,
+  CreateKdsDeviceRequest,
+  CreateMemberRequest,
   CreateMenuCategoryRequest,
   CreateMenuItemRequest,
   CreateOrderRequest,
   CreateServiceRequestRequest,
   CreateStaffUserRequest,
+  CreateSupplierRequest,
   CustomerOrder,
   DiningTable,
   FohPendingItem,
   FohTable,
+  InventoryAdjustment,
   KitchenPendingItem,
+  KdsDevice,
+  LanguageCode,
+  LocalizedText,
   ManageAnalyticsResponse,
+  ManageOperationsResponse,
   ManageStaffUser,
+  Member,
   MenuCategory,
   MenuItem,
+  MenuModifierGroup,
   Order,
   OrderItem,
   OrderItemStatus,
   OrderStatus,
   OrderTotals,
   Payment,
+  PaymentMethod,
+  PaymentMethodOption,
   PaymentsResponse,
   PrintJob,
+  RefundPaymentRequest,
   ServiceRequest,
   ServiceRequestStatus,
+  StoreMarket,
   StoreSettings,
   StoreSummary,
+  Supplier,
   TableStatus,
+  TaxRule,
   UpdateDiningTableRequest,
   UpdateMenuCategoryRequest,
   UpdateMenuItemInventoryRequest,
@@ -42,18 +62,42 @@ import { hashPassword } from "./auth.js";
 import { prisma } from "./db.js";
 import { HttpError } from "./http.js";
 
+const LANGUAGE_SET = new Set<LanguageCode>(["en", "fr-CA", "zh-CN"]);
+const PAYMENT_METHOD_SET = new Set<PaymentMethodOption>([
+  "CASH",
+  "CARD",
+  "INTERAC",
+  "STRIPE",
+  "WECHAT_PAY",
+  "ALIPAY",
+  "UNIONPAY",
+  "GIFT_CARD",
+  "OTHER",
+]);
+
 type StoreRecord = {
   id: string;
   name: string;
+  market: string;
+  region: string | null;
   currency: string;
   locale: string;
   timezone: string;
+  defaultLanguage: string;
+  supportedLanguages: unknown;
   address: string | null;
   phone: string | null;
+  taxNumber: string | null;
+  taxMode: string;
+  priceIncludesTax: boolean;
+  taxRules: unknown;
   taxLabel: string;
   taxRateBps: number;
   serviceChargeLabel: string;
   serviceChargeRateBps: number;
+  enabledPaymentMethods: unknown;
+  invoiceInstructions: string | null;
+  tipEnabled: boolean;
   receiptFooter: string | null;
 };
 
@@ -80,7 +124,15 @@ type MenuItemRecord = {
   id: string;
   categoryId: string;
   name: string;
+  nameLocalized: unknown;
   description: string | null;
+  descriptionLocalized: unknown;
+  imageUrl: string | null;
+  allergens: unknown;
+  spiceLevel: number;
+  taxCategory: string;
+  kitchenStation: string;
+  modifierGroups: unknown;
   priceCents: number;
   isAvailable: boolean;
   stockQuantity: number | null;
@@ -101,6 +153,9 @@ type OrderItemRecord = {
   menuItemId: string;
   nameSnapshot: string;
   priceCentsSnapshot: number;
+  modifierTotalCentsSnapshot: number;
+  modifiers: unknown;
+  note: string | null;
   quantity: number;
   status: OrderItemStatus;
   createdAt: Date;
@@ -144,7 +199,9 @@ type PaymentRecord = {
   id: string;
   tableId: string;
   method: Payment["method"];
+  status: string;
   amountCents: number;
+  refundedCents: number;
   currency: string;
   reference: string | null;
   note: string | null;
@@ -162,6 +219,174 @@ function optionalIso(date: Date | null | undefined) {
   return date ? date.toISOString() : null;
 }
 
+function jsonObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function jsonArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function localizedText(value: unknown): LocalizedText | null {
+  const object = jsonObject(value);
+  const result: LocalizedText = {};
+  for (const language of LANGUAGE_SET) {
+    const candidate = object[language];
+    if (typeof candidate === "string" && candidate.trim()) {
+      result[language] = candidate;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function stringArray(value: unknown): string[] {
+  return jsonArray(value)
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function languages(value: unknown, fallback: LanguageCode): LanguageCode[] {
+  const parsed = stringArray(value).filter((entry): entry is LanguageCode =>
+    LANGUAGE_SET.has(entry as LanguageCode),
+  );
+  return parsed.length > 0 ? parsed : [fallback];
+}
+
+function language(value: string): LanguageCode {
+  return LANGUAGE_SET.has(value as LanguageCode)
+    ? (value as LanguageCode)
+    : "en";
+}
+
+function storeMarket(value: string): StoreMarket {
+  if (value === "CHINA" || value === "OTHER") return value;
+  return "CANADA";
+}
+
+function paymentMethods(value: unknown): PaymentMethodOption[] {
+  const parsed = stringArray(value).filter(
+    (entry): entry is PaymentMethodOption =>
+      PAYMENT_METHOD_SET.has(entry as PaymentMethodOption),
+  );
+  return parsed.length > 0 ? parsed : ["CASH", "CARD", "OTHER"];
+}
+
+function taxRules(
+  value: unknown,
+  store: Pick<StoreRecord, "taxLabel" | "taxRateBps">,
+): TaxRule[] {
+  const parsed: TaxRule[] = [];
+  for (const entry of jsonArray(value)) {
+    const object = jsonObject(entry);
+    const id = typeof object.id === "string" ? object.id.trim() : "";
+    const label =
+      typeof object.label === "string" ? object.label.trim() : store.taxLabel;
+    const rateBps =
+      typeof object.rateBps === "number" && Number.isFinite(object.rateBps)
+        ? Math.max(0, Math.round(object.rateBps))
+        : 0;
+    const appliesTo =
+      typeof object.appliesTo === "string"
+        ? object.appliesTo.trim() || "ALL"
+        : "ALL";
+    if (id && label && rateBps > 0) {
+      parsed.push({
+        id,
+        label,
+        rateBps,
+        appliesTo,
+        compoundOnPrevious: object.compoundOnPrevious === true,
+      });
+    }
+  }
+
+  if (parsed.length > 0) return parsed;
+  return store.taxRateBps > 0
+    ? [
+        {
+          id: "default",
+          label: store.taxLabel,
+          rateBps: store.taxRateBps,
+          appliesTo: "ALL",
+        },
+      ]
+    : [];
+}
+
+function modifierGroups(value: unknown): MenuModifierGroup[] {
+  const groups: MenuModifierGroup[] = [];
+  for (const entry of jsonArray(value)) {
+    const object = jsonObject(entry);
+    const id = typeof object.id === "string" ? object.id.trim() : "";
+    const name = typeof object.name === "string" ? object.name.trim() : "";
+    const options: MenuModifierGroup["options"] = [];
+    for (const optionEntry of jsonArray(object.options)) {
+      const option = jsonObject(optionEntry);
+      const optionId = typeof option.id === "string" ? option.id.trim() : "";
+      const optionName =
+        typeof option.name === "string" ? option.name.trim() : "";
+      const priceDeltaCents =
+        typeof option.priceDeltaCents === "number" &&
+        Number.isFinite(option.priceDeltaCents)
+          ? Math.round(option.priceDeltaCents)
+          : 0;
+      if (optionId && optionName) {
+        options.push({
+          id: optionId,
+          name: optionName,
+          nameLocalized: localizedText(option.nameLocalized),
+          priceDeltaCents,
+          isDefault: option.isDefault === true,
+        });
+      }
+    }
+    if (!id || !name || options.length === 0) continue;
+    const maxSelect =
+      typeof object.maxSelect === "number"
+        ? Math.max(1, Math.round(object.maxSelect))
+        : 1;
+    const minSelect =
+      typeof object.minSelect === "number"
+        ? Math.max(0, Math.min(maxSelect, Math.round(object.minSelect)))
+        : object.required === true
+          ? 1
+          : 0;
+    groups.push({
+      id,
+      name,
+      nameLocalized: localizedText(object.nameLocalized),
+      required: object.required === true || minSelect > 0,
+      minSelect,
+      maxSelect,
+      options,
+    });
+  }
+  return groups;
+}
+
+function selectedModifiers(value: unknown): OrderItem["modifiers"] {
+  return jsonArray(value)
+    .map((entry) => {
+      const object = jsonObject(entry);
+      const groupId = typeof object.groupId === "string" ? object.groupId : "";
+      const optionId =
+        typeof object.optionId === "string" ? object.optionId : "";
+      const name = typeof object.name === "string" ? object.name : "";
+      const priceDeltaCents =
+        typeof object.priceDeltaCents === "number" &&
+        Number.isFinite(object.priceDeltaCents)
+          ? Math.round(object.priceDeltaCents)
+          : 0;
+      return groupId && optionId && name
+        ? { groupId, optionId, name, priceDeltaCents }
+        : null;
+    })
+    .filter((entry): entry is OrderItem["modifiers"][number] => entry !== null);
+}
+
 function mapStore(store: StoreRecord): StoreSummary {
   return {
     id: store.id,
@@ -173,14 +398,29 @@ function mapStore(store: StoreRecord): StoreSummary {
 }
 
 function mapStoreSettings(store: StoreRecord): StoreSettings {
+  const defaultLanguage = language(store.defaultLanguage);
   return {
     ...mapStore(store),
+    market: storeMarket(store.market),
+    region: store.region,
+    defaultLanguage,
+    supportedLanguages: languages(store.supportedLanguages, defaultLanguage),
     address: store.address,
     phone: store.phone,
+    taxNumber: store.taxNumber,
+    taxMode:
+      store.taxMode === "CANADA" || store.taxMode === "CHINA"
+        ? store.taxMode
+        : "SINGLE",
+    priceIncludesTax: store.priceIncludesTax,
+    taxRules: taxRules(store.taxRules, store),
     taxLabel: store.taxLabel,
     taxRateBps: store.taxRateBps,
     serviceChargeLabel: store.serviceChargeLabel,
     serviceChargeRateBps: store.serviceChargeRateBps,
+    enabledPaymentMethods: paymentMethods(store.enabledPaymentMethods),
+    invoiceInstructions: store.invoiceInstructions,
+    tipEnabled: store.tipEnabled,
     receiptFooter: store.receiptFooter,
   };
 }
@@ -219,7 +459,15 @@ function mapMenuItem(item: MenuItemRecord): MenuItem {
     id: item.id,
     categoryId: item.categoryId,
     name: item.name,
+    nameLocalized: localizedText(item.nameLocalized),
     description: item.description,
+    descriptionLocalized: localizedText(item.descriptionLocalized),
+    imageUrl: item.imageUrl,
+    allergens: stringArray(item.allergens),
+    spiceLevel: item.spiceLevel,
+    taxCategory: item.taxCategory,
+    kitchenStation: item.kitchenStation,
+    modifierGroups: modifierGroups(item.modifierGroups),
     priceCents: item.priceCents,
     isAvailable: item.isAvailable,
     stockQuantity: item.stockQuantity,
@@ -246,6 +494,9 @@ function mapOrderItem(item: OrderItemRecord): OrderItem {
     menuItemId: item.menuItemId,
     nameSnapshot: item.nameSnapshot,
     priceCentsSnapshot: item.priceCentsSnapshot,
+    modifierTotalCentsSnapshot: item.modifierTotalCentsSnapshot,
+    modifiers: selectedModifiers(item.modifiers),
+    note: item.note,
     quantity: item.quantity,
     status: item.status,
     createdAt: toIso(item.createdAt),
@@ -301,13 +552,134 @@ function mapPayment(payment: PaymentRecord): Payment {
     tableId: payment.tableId,
     tableNumber: payment.table?.number ?? null,
     method: payment.method,
+    status:
+      payment.status === "REFUNDED" || payment.status === "PARTIALLY_REFUNDED"
+        ? payment.status
+        : "PAID",
     amountCents: payment.amountCents,
+    refundedCents: payment.refundedCents,
     currency: payment.currency,
     reference: payment.reference,
     note: payment.note,
     orderIds,
     paidAt: toIso(payment.paidAt),
     createdAt: toIso(payment.createdAt),
+  };
+}
+
+function mapSupplier(supplier: {
+  id: string;
+  name: string;
+  contactName: string | null;
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: Date;
+}): Supplier {
+  return {
+    id: supplier.id,
+    name: supplier.name,
+    contactName: supplier.contactName,
+    phone: supplier.phone,
+    email: supplier.email,
+    notes: supplier.notes,
+    isActive: supplier.isActive,
+    createdAt: toIso(supplier.createdAt),
+  };
+}
+
+function mapInventoryAdjustment(adjustment: {
+  id: string;
+  menuItemId: string;
+  quantityDelta: number;
+  reason: string;
+  note: string | null;
+  createdAt: Date;
+  menuItem: { name: string };
+}): InventoryAdjustment {
+  return {
+    id: adjustment.id,
+    menuItemId: adjustment.menuItemId,
+    menuItemName: adjustment.menuItem.name,
+    quantityDelta: adjustment.quantityDelta,
+    reason: adjustment.reason,
+    note: adjustment.note,
+    createdAt: toIso(adjustment.createdAt),
+  };
+}
+
+function mapMember(member: {
+  id: string;
+  name: string | null;
+  phone: string;
+  email: string | null;
+  points: number;
+  createdAt: Date;
+}): Member {
+  return {
+    id: member.id,
+    name: member.name,
+    phone: member.phone,
+    email: member.email,
+    points: member.points,
+    createdAt: toIso(member.createdAt),
+  };
+}
+
+function mapCoupon(coupon: {
+  id: string;
+  code: string;
+  discountType: string;
+  discountValue: number;
+  isActive: boolean;
+  startsAt: Date | null;
+  endsAt: Date | null;
+}): Coupon {
+  return {
+    id: coupon.id,
+    code: coupon.code,
+    discountType: coupon.discountType === "AMOUNT" ? "AMOUNT" : "PERCENT",
+    discountValue: coupon.discountValue,
+    isActive: coupon.isActive,
+    startsAt: optionalIso(coupon.startsAt),
+    endsAt: optionalIso(coupon.endsAt),
+  };
+}
+
+function mapKdsDevice(device: {
+  id: string;
+  name: string;
+  station: string | null;
+  token: string;
+  isActive: boolean;
+  lastSeenAt: Date | null;
+}): KdsDevice {
+  return {
+    id: device.id,
+    name: device.name,
+    station: device.station,
+    token: device.token,
+    isActive: device.isActive,
+    lastSeenAt: optionalIso(device.lastSeenAt),
+  };
+}
+
+function mapAuditLog(log: {
+  id: string;
+  actorEmail: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  createdAt: Date;
+}): AuditLog {
+  return {
+    id: log.id,
+    actorEmail: log.actorEmail,
+    action: log.action,
+    entityType: log.entityType,
+    entityId: log.entityId,
+    createdAt: toIso(log.createdAt),
   };
 }
 
@@ -330,6 +702,7 @@ function buildOrderTicketPayload(input: {
       timezone: input.store.timezone,
       address: input.store.address,
       phone: input.store.phone,
+      taxNumber: input.store.taxNumber,
       receiptFooter: input.store.receiptFooter,
     },
     table: {
@@ -345,6 +718,8 @@ function buildOrderTicketPayload(input: {
         id: item.id,
         name: item.nameSnapshot,
         quantity: item.quantity,
+        modifiers: selectedModifiers(item.modifiers),
+        note: item.note,
         status: item.status,
       })),
       totals: calculateTotals(input.order.items, input.store),
@@ -354,7 +729,9 @@ function buildOrderTicketPayload(input: {
 
 function itemSubtotal(item: OrderItemRecord) {
   if (item.status === "CANCELED") return 0;
-  return item.priceCentsSnapshot * item.quantity;
+  return (
+    (item.priceCentsSnapshot + item.modifierTotalCentsSnapshot) * item.quantity
+  );
 }
 
 function calculateTotals(
@@ -369,12 +746,37 @@ function calculateTotals(
     (subtotalCents * store.serviceChargeRateBps) / 10000,
   );
   const taxableCents = subtotalCents + serviceChargeCents;
-  const taxCents = Math.round((taxableCents * store.taxRateBps) / 10000);
+  const rules = taxRules(store.taxRules, store);
+  let runningTaxBase = taxableCents;
+  let includedTaxCents = 0;
+  const taxLines = rules.map((rule) => {
+    const base = rule.compoundOnPrevious ? runningTaxBase : taxableCents;
+    const amountCents = store.priceIncludesTax
+      ? Math.round((base * rule.rateBps) / (10000 + rule.rateBps))
+      : Math.round((base * rule.rateBps) / 10000);
+    if (!store.priceIncludesTax && rule.compoundOnPrevious) {
+      runningTaxBase += amountCents;
+    }
+    if (store.priceIncludesTax) includedTaxCents += amountCents;
+    return {
+      label: rule.label,
+      rateBps: rule.rateBps,
+      amountCents,
+    };
+  });
+  const taxCents = store.priceIncludesTax
+    ? includedTaxCents
+    : taxLines.reduce((sum, line) => sum + line.amountCents, 0);
   return {
     subtotalCents,
     serviceChargeCents,
     taxCents,
-    totalCents: subtotalCents + serviceChargeCents + taxCents,
+    taxLines,
+    includedTaxCents,
+    totalCents:
+      subtotalCents +
+      serviceChargeCents +
+      (store.priceIncludesTax ? 0 : taxCents),
     serviceChargeRateBps: store.serviceChargeRateBps,
     taxRateBps: store.taxRateBps,
     serviceChargeLabel: store.serviceChargeLabel,
@@ -586,6 +988,72 @@ async function getMenuCategories(storeId: string, onlyAvailable: boolean) {
     : mapped;
 }
 
+function resolveOrderModifiers(
+  menuItem: MenuItemRecord,
+  requestedModifiers: CreateOrderRequest["items"][number]["modifiers"] = [],
+) {
+  const groups = modifierGroups(menuItem.modifierGroups);
+  const requestedByKey = new Map(
+    requestedModifiers.map((modifier) => [
+      `${modifier.groupId}:${modifier.optionId}`,
+      modifier,
+    ]),
+  );
+  const resolved: OrderItem["modifiers"] = [];
+
+  for (const group of groups) {
+    const selectedForGroup = group.options.filter((option) =>
+      requestedByKey.has(`${group.id}:${option.id}`),
+    );
+    const effectiveSelection =
+      selectedForGroup.length > 0
+        ? selectedForGroup
+        : group.options.filter((option) => option.isDefault);
+
+    if (effectiveSelection.length < group.minSelect) {
+      throw new HttpError(
+        400,
+        "REQUIRED_MODIFIER_MISSING",
+        `${menuItem.name} requires ${group.name}`,
+      );
+    }
+    if (effectiveSelection.length > group.maxSelect) {
+      throw new HttpError(
+        400,
+        "TOO_MANY_MODIFIERS",
+        `${group.name} allows at most ${group.maxSelect}`,
+      );
+    }
+
+    for (const option of effectiveSelection) {
+      resolved.push({
+        groupId: group.id,
+        optionId: option.id,
+        name: `${group.name}: ${option.name}`,
+        priceDeltaCents: option.priceDeltaCents,
+      });
+    }
+  }
+
+  const allowedKeys = new Set(
+    groups.flatMap((group) =>
+      group.options.map((option) => `${group.id}:${option.id}`),
+    ),
+  );
+  for (const modifier of requestedModifiers) {
+    const key = `${modifier.groupId}:${modifier.optionId}`;
+    if (!allowedKeys.has(key)) {
+      throw new HttpError(
+        400,
+        "INVALID_MODIFIER",
+        `Invalid modifier for ${menuItem.name}`,
+      );
+    }
+  }
+
+  return resolved;
+}
+
 export async function getPublicMenu(qrToken: string) {
   const table = await prisma.diningTable.findUnique({
     where: { qrToken },
@@ -728,10 +1196,17 @@ export async function createOrder(input: CreateOrderRequest) {
           `Invalid menu item: ${requested.menuItemId}`,
         );
       }
+      const modifiers = resolveOrderModifiers(menuItem, requested.modifiers);
       return {
         menuItemId: menuItem.id,
         nameSnapshot: menuItem.name,
         priceCentsSnapshot: menuItem.priceCents,
+        modifierTotalCentsSnapshot: modifiers.reduce(
+          (sum, modifier) => sum + modifier.priceDeltaCents,
+          0,
+        ),
+        modifiers,
+        note: requested.note?.trim() || null,
         quantity: requested.quantity,
         status: "PENDING" as const,
       };
@@ -950,7 +1425,20 @@ export async function checkoutTable(
       tableOrders.flatMap((order) => order.items),
       table.store,
     );
-    const amountCents = input.amountCents ?? totals.totalCents;
+    const paymentMethod = input.paymentMethod ?? "CASH";
+    if (!PAYMENT_METHOD_SET.has(paymentMethod)) {
+      throw new HttpError(
+        400,
+        "INVALID_PAYMENT_METHOD",
+        "Unsupported payment method",
+      );
+    }
+    const amountCents =
+      input.amountCents ??
+      Math.max(
+        0,
+        totals.totalCents + (input.tipCents ?? 0) - (input.discountCents ?? 0),
+      );
     if (amountCents < 0) {
       throw new HttpError(
         400,
@@ -972,11 +1460,21 @@ export async function checkoutTable(
             data: {
               storeId: table.storeId,
               tableId,
-              method: input.paymentMethod ?? "CASH",
+              method: paymentMethod as PaymentMethod,
               amountCents,
               currency: table.store.currency,
               reference: input.reference?.trim() || null,
-              note: input.note?.trim() || null,
+              note:
+                input.note?.trim() ||
+                [
+                  input.tipCents ? `tip=${input.tipCents}` : null,
+                  input.discountCents
+                    ? `discount=${input.discountCents}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join("; ") ||
+                null,
               orderIds: closedOrderIds,
               paidAt: closedAt,
             },
@@ -989,6 +1487,69 @@ export async function checkoutTable(
       closedAt: toIso(closedAt),
       payment: payment ? mapPayment(payment) : null,
     };
+  });
+}
+
+export async function refundPayment(
+  paymentId: string,
+  input: RefundPaymentRequest,
+) {
+  if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) {
+    throw new HttpError(
+      400,
+      "INVALID_REFUND_AMOUNT",
+      "Refund amount must be positive",
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.payment.findUnique({
+      where: { id: paymentId },
+      include: { table: { select: { number: true } } },
+    });
+    if (!existing) {
+      throw new HttpError(404, "PAYMENT_NOT_FOUND", "Payment not found");
+    }
+    const refundableCents = existing.amountCents - existing.refundedCents;
+    if (input.amountCents > refundableCents) {
+      throw new HttpError(
+        409,
+        "REFUND_EXCEEDS_PAYMENT",
+        "Refund exceeds remaining payment amount",
+      );
+    }
+
+    const refundedCents = existing.refundedCents + input.amountCents;
+    const payment = await tx.payment.update({
+      where: { id: paymentId },
+      data: {
+        refundedCents,
+        status:
+          refundedCents >= existing.amountCents
+            ? "REFUNDED"
+            : "PARTIALLY_REFUNDED",
+        note:
+          [existing.note, input.reason ? `refund: ${input.reason}` : null]
+            .filter(Boolean)
+            .join("; ") || null,
+      },
+      include: { table: { select: { number: true } } },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId: existing.storeId,
+        action: "PAYMENT_REFUNDED",
+        entityType: "Payment",
+        entityId: paymentId,
+        metadata: {
+          amountCents: input.amountCents,
+          reason: input.reason ?? null,
+        },
+      },
+    });
+
+    return mapPayment(payment);
   });
 }
 
@@ -1006,6 +1567,9 @@ export async function getKitchenPendingItems() {
       order: {
         select: { submittedAt: true },
       },
+      menuItem: {
+        select: { kitchenStation: true },
+      },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -1013,11 +1577,14 @@ export async function getKitchenPendingItems() {
   const grouped = new Map<string, KitchenPendingItem>();
   for (const item of pendingItems) {
     const earliestSubmittedAt = toIso(item.order.submittedAt);
-    const existing = grouped.get(item.menuItemId);
+    const kitchenStation = item.menuItem.kitchenStation || "HOT";
+    const groupKey = `${kitchenStation}:${item.menuItemId}`;
+    const existing = grouped.get(groupKey);
     if (!existing) {
-      grouped.set(item.menuItemId, {
+      grouped.set(groupKey, {
         menuItemId: item.menuItemId,
         name: item.nameSnapshot,
+        kitchenStation,
         quantity: item.quantity,
         earliestSubmittedAt,
       });
@@ -1252,6 +1819,188 @@ export async function getManageAnalytics(
   };
 }
 
+export async function getManageOperations(): Promise<ManageOperationsResponse> {
+  const store = await getDefaultStore();
+  const [
+    suppliers,
+    inventoryAdjustments,
+    members,
+    coupons,
+    kdsDevices,
+    auditLogs,
+  ] = await Promise.all([
+    prisma.supplier.findMany({
+      where: { storeId: store.id },
+      orderBy: { name: "asc" },
+      take: 100,
+    }),
+    prisma.inventoryAdjustment.findMany({
+      where: { storeId: store.id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: { menuItem: { select: { name: true } } },
+    }),
+    prisma.member.findMany({
+      where: { storeId: store.id },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    prisma.coupon.findMany({
+      where: { storeId: store.id },
+      orderBy: { code: "asc" },
+      take: 100,
+    }),
+    prisma.kdsDevice.findMany({
+      where: { storeId: store.id },
+      orderBy: { name: "asc" },
+      take: 100,
+    }),
+    prisma.auditLog.findMany({
+      where: { storeId: store.id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
+  ]);
+
+  return {
+    store: mapStore(store),
+    suppliers: suppliers.map(mapSupplier),
+    inventoryAdjustments: inventoryAdjustments.map(mapInventoryAdjustment),
+    members: members.map(mapMember),
+    coupons: coupons.map(mapCoupon),
+    kdsDevices: kdsDevices.map(mapKdsDevice),
+    auditLogs: auditLogs.map(mapAuditLog),
+  };
+}
+
+export async function createSupplier(input: CreateSupplierRequest) {
+  const store = await getDefaultStore();
+  const supplier = await prisma.supplier.create({
+    data: {
+      storeId: store.id,
+      name: input.name.trim(),
+      contactName: input.contactName?.trim() || null,
+      phone: input.phone?.trim() || null,
+      email: input.email?.trim() || null,
+      notes: input.notes?.trim() || null,
+    },
+  });
+  return mapSupplier(supplier);
+}
+
+export async function createInventoryAdjustment(
+  input: CreateInventoryAdjustmentRequest,
+) {
+  const store = await getDefaultStore();
+  return prisma.$transaction(async (tx) => {
+    const item = await tx.menuItem.findFirst({
+      where: { id: input.menuItemId, storeId: store.id },
+    });
+    if (!item) {
+      throw new HttpError(404, "MENU_ITEM_NOT_FOUND", "Menu item not found");
+    }
+    const nextStock = Math.max(
+      0,
+      (item.stockQuantity ?? 0) + input.quantityDelta,
+    );
+    await tx.menuItem.update({
+      where: { id: item.id },
+      data: { stockQuantity: nextStock },
+    });
+    const adjustment = await tx.inventoryAdjustment.create({
+      data: {
+        storeId: store.id,
+        menuItemId: item.id,
+        quantityDelta: input.quantityDelta,
+        reason: input.reason.trim(),
+        note: input.note?.trim() || null,
+      },
+      include: { menuItem: { select: { name: true } } },
+    });
+    await tx.auditLog.create({
+      data: {
+        storeId: store.id,
+        action: "INVENTORY_ADJUSTED",
+        entityType: "MenuItem",
+        entityId: item.id,
+        metadata: {
+          quantityDelta: input.quantityDelta,
+          reason: input.reason,
+        },
+      },
+    });
+    return mapInventoryAdjustment(adjustment);
+  });
+}
+
+export async function createMember(input: CreateMemberRequest) {
+  const store = await getDefaultStore();
+  const member = await prisma.member.upsert({
+    where: {
+      storeId_phone: {
+        storeId: store.id,
+        phone: input.phone.trim(),
+      },
+    },
+    update: {
+      name: input.name?.trim() || null,
+      email: input.email?.trim() || null,
+      ...(input.points !== undefined ? { points: input.points } : {}),
+    },
+    create: {
+      storeId: store.id,
+      name: input.name?.trim() || null,
+      phone: input.phone.trim(),
+      email: input.email?.trim() || null,
+      points: input.points ?? 0,
+    },
+  });
+  return mapMember(member);
+}
+
+export async function createCoupon(input: CreateCouponRequest) {
+  const store = await getDefaultStore();
+  const coupon = await prisma.coupon.upsert({
+    where: {
+      storeId_code: {
+        storeId: store.id,
+        code: input.code.trim().toUpperCase(),
+      },
+    },
+    update: {
+      discountType: input.discountType,
+      discountValue: input.discountValue,
+      isActive: input.isActive,
+      startsAt: input.startsAt ? new Date(input.startsAt) : null,
+      endsAt: input.endsAt ? new Date(input.endsAt) : null,
+    },
+    create: {
+      storeId: store.id,
+      code: input.code.trim().toUpperCase(),
+      discountType: input.discountType,
+      discountValue: input.discountValue,
+      isActive: input.isActive,
+      startsAt: input.startsAt ? new Date(input.startsAt) : null,
+      endsAt: input.endsAt ? new Date(input.endsAt) : null,
+    },
+  });
+  return mapCoupon(coupon);
+}
+
+export async function createKdsDevice(input: CreateKdsDeviceRequest) {
+  const store = await getDefaultStore();
+  const device = await prisma.kdsDevice.create({
+    data: {
+      storeId: store.id,
+      name: input.name.trim(),
+      station: input.station?.trim() || null,
+      token: input.token?.trim() || `kds_${randomBytes(12).toString("hex")}`,
+      isActive: input.isActive,
+    },
+  });
+  return mapKdsDevice(device);
+}
+
 export async function getManageTables() {
   const store = await getDefaultStore();
   const tables = await prisma.diningTable.findMany({
@@ -1369,6 +2118,10 @@ export async function updateStoreSettings(input: UpdateStoreSettingsRequest) {
     where: { id: store.id },
     data: {
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+      ...(input.market !== undefined ? { market: input.market } : {}),
+      ...(input.region !== undefined
+        ? { region: input.region?.trim() || null }
+        : {}),
       ...(input.currency !== undefined
         ? { currency: input.currency.trim().toUpperCase() }
         : {}),
@@ -1376,12 +2129,26 @@ export async function updateStoreSettings(input: UpdateStoreSettingsRequest) {
       ...(input.timezone !== undefined
         ? { timezone: input.timezone.trim() }
         : {}),
+      ...(input.defaultLanguage !== undefined
+        ? { defaultLanguage: input.defaultLanguage }
+        : {}),
+      ...(input.supportedLanguages !== undefined
+        ? { supportedLanguages: input.supportedLanguages }
+        : {}),
       ...(input.address !== undefined
         ? { address: input.address?.trim() || null }
         : {}),
       ...(input.phone !== undefined
         ? { phone: input.phone?.trim() || null }
         : {}),
+      ...(input.taxNumber !== undefined
+        ? { taxNumber: input.taxNumber?.trim() || null }
+        : {}),
+      ...(input.taxMode !== undefined ? { taxMode: input.taxMode } : {}),
+      ...(input.priceIncludesTax !== undefined
+        ? { priceIncludesTax: input.priceIncludesTax }
+        : {}),
+      ...(input.taxRules !== undefined ? { taxRules: input.taxRules } : {}),
       ...(input.taxLabel !== undefined
         ? { taxLabel: input.taxLabel.trim() }
         : {}),
@@ -1393,6 +2160,15 @@ export async function updateStoreSettings(input: UpdateStoreSettingsRequest) {
         : {}),
       ...(input.serviceChargeRateBps !== undefined
         ? { serviceChargeRateBps: input.serviceChargeRateBps }
+        : {}),
+      ...(input.enabledPaymentMethods !== undefined
+        ? { enabledPaymentMethods: input.enabledPaymentMethods }
+        : {}),
+      ...(input.invoiceInstructions !== undefined
+        ? { invoiceInstructions: input.invoiceInstructions?.trim() || null }
+        : {}),
+      ...(input.tipEnabled !== undefined
+        ? { tipEnabled: input.tipEnabled }
         : {}),
       ...(input.receiptFooter !== undefined
         ? { receiptFooter: input.receiptFooter?.trim() || null }
@@ -1479,7 +2255,15 @@ export async function addMenuItem(input: CreateMenuItemRequest) {
       storeId: category.storeId,
       categoryId: input.categoryId,
       name: input.name.trim(),
+      nameLocalized: input.nameLocalized ?? undefined,
       description: input.description?.trim() || null,
+      descriptionLocalized: input.descriptionLocalized ?? undefined,
+      imageUrl: input.imageUrl?.trim() || null,
+      allergens: input.allergens ?? [],
+      spiceLevel: input.spiceLevel ?? 0,
+      taxCategory: input.taxCategory?.trim() || "PREPARED_FOOD",
+      kitchenStation: input.kitchenStation?.trim() || "HOT",
+      modifierGroups: input.modifierGroups ?? [],
       priceCents: input.priceCents,
       isAvailable: input.isAvailable ?? true,
       stockQuantity: input.stockQuantity ?? null,
@@ -1506,11 +2290,33 @@ export async function updateMenuItem(
     where: { id: itemId },
     data: {
       ...(input.categoryId !== undefined
-        ? { categoryId: input.categoryId }
+        ? { category: { connect: { id: input.categoryId } } }
         : {}),
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+      ...(input.nameLocalized !== undefined
+        ? { nameLocalized: input.nameLocalized ?? undefined }
+        : {}),
       ...(input.description !== undefined
         ? { description: input.description?.trim() || null }
+        : {}),
+      ...(input.descriptionLocalized !== undefined
+        ? { descriptionLocalized: input.descriptionLocalized ?? undefined }
+        : {}),
+      ...(input.imageUrl !== undefined
+        ? { imageUrl: input.imageUrl?.trim() || null }
+        : {}),
+      ...(input.allergens !== undefined ? { allergens: input.allergens } : {}),
+      ...(input.spiceLevel !== undefined
+        ? { spiceLevel: input.spiceLevel }
+        : {}),
+      ...(input.taxCategory !== undefined
+        ? { taxCategory: input.taxCategory.trim() || "PREPARED_FOOD" }
+        : {}),
+      ...(input.kitchenStation !== undefined
+        ? { kitchenStation: input.kitchenStation.trim() || "HOT" }
+        : {}),
+      ...(input.modifierGroups !== undefined
+        ? { modifierGroups: input.modifierGroups }
         : {}),
       ...(input.priceCents !== undefined
         ? { priceCents: input.priceCents }

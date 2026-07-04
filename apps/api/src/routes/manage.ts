@@ -1,15 +1,26 @@
 import { Router } from "express";
 import { z } from "zod";
-import { STAFF_ROLES } from "@qr2/shared";
+import {
+  LANGUAGE_CODES,
+  PAYMENT_METHODS,
+  STAFF_ROLES,
+  STORE_MARKETS,
+} from "@qr2/shared";
 import {
   addMenuItem,
+  createCoupon,
   createStaffUser,
+  createInventoryAdjustment,
+  createKdsDevice,
+  createMember,
   createMenuCategory,
   createDiningTable,
+  createSupplier,
   deleteMenuCategory,
   deleteDiningTable,
   deleteMenuItem,
   getManageAnalytics,
+  getManageOperations,
   getManageMenu,
   getFohPrintJobs,
   getManageStaff,
@@ -45,10 +56,53 @@ const menuCategoryBodySchema = z.object({
   sortOrder: z.number().int().min(0).max(9999).optional(),
 });
 
+const localizedTextSchema = z
+  .object({
+    en: z.string().trim().max(200).optional().nullable(),
+    "fr-CA": z.string().trim().max(200).optional().nullable(),
+    "zh-CN": z.string().trim().max(200).optional().nullable(),
+  })
+  .optional()
+  .nullable();
+
+const modifierOptionSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(120),
+  nameLocalized: localizedTextSchema,
+  priceDeltaCents: z.number().int().min(-999999).max(999999),
+  isDefault: z.boolean().optional(),
+});
+
+const modifierGroupSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(120),
+  nameLocalized: localizedTextSchema,
+  required: z.boolean(),
+  minSelect: z.number().int().min(0).max(20),
+  maxSelect: z.number().int().min(1).max(20),
+  options: z.array(modifierOptionSchema).min(1).max(50),
+});
+
+const taxRuleSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  label: z.string().trim().min(1).max(80),
+  rateBps: z.number().int().min(0).max(3000),
+  appliesTo: z.string().trim().min(1).max(80),
+  compoundOnPrevious: z.boolean().optional(),
+});
+
 const menuItemBodySchema = z.object({
   categoryId: z.string().trim().min(1),
   name: z.string().trim().min(1).max(120),
+  nameLocalized: localizedTextSchema,
   description: z.string().trim().max(500).optional().nullable(),
+  descriptionLocalized: localizedTextSchema,
+  imageUrl: z.string().trim().url().max(500).optional().nullable(),
+  allergens: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+  spiceLevel: z.number().int().min(0).max(5).optional(),
+  taxCategory: z.string().trim().min(1).max(80).optional(),
+  kitchenStation: z.string().trim().min(1).max(80).optional(),
+  modifierGroups: z.array(modifierGroupSchema).max(20).optional(),
   priceCents: z.number().int().nonnegative(),
   isAvailable: z.boolean().optional(),
   stockQuantity: z.number().int().min(0).max(9999).optional().nullable(),
@@ -80,15 +134,29 @@ manageRouter.patch("/store-settings", async (req, res, next) => {
     const body = z
       .object({
         name: z.string().trim().min(1).max(120).optional(),
+        market: z.enum(STORE_MARKETS).optional(),
+        region: z.string().trim().max(80).optional().nullable(),
         currency: z.string().trim().length(3).optional(),
         locale: z.string().trim().min(2).max(40).optional(),
         timezone: z.string().trim().min(2).max(80).optional(),
+        defaultLanguage: z.enum(LANGUAGE_CODES).optional(),
+        supportedLanguages: z.array(z.enum(LANGUAGE_CODES)).min(1).optional(),
         address: z.string().trim().max(300).optional().nullable(),
         phone: z.string().trim().max(80).optional().nullable(),
+        taxNumber: z.string().trim().max(80).optional().nullable(),
+        taxMode: z.enum(["SINGLE", "CANADA", "CHINA"]).optional(),
+        priceIncludesTax: z.boolean().optional(),
+        taxRules: z.array(taxRuleSchema).max(12).optional(),
         taxLabel: z.string().trim().min(1).max(80).optional(),
         taxRateBps: z.number().int().min(0).max(3000).optional(),
         serviceChargeLabel: z.string().trim().min(1).max(80).optional(),
         serviceChargeRateBps: z.number().int().min(0).max(3000).optional(),
+        enabledPaymentMethods: z
+          .array(z.enum(PAYMENT_METHODS))
+          .min(1)
+          .optional(),
+        invoiceInstructions: z.string().trim().max(500).optional().nullable(),
+        tipEnabled: z.boolean().optional(),
         receiptFooter: z.string().trim().max(500).optional().nullable(),
       })
       .parse(req.body);
@@ -114,6 +182,100 @@ manageRouter.get("/analytics", async (req, res, next) => {
       })
       .parse(req.query);
     res.json(await getManageAnalytics(query.days));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.get("/operations", async (_req, res, next) => {
+  try {
+    res.json(await getManageOperations());
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.post("/operations/suppliers", async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        name: z.string().trim().min(1).max(160),
+        contactName: z.string().trim().max(120).optional().nullable(),
+        phone: z.string().trim().max(80).optional().nullable(),
+        email: z.string().trim().email().max(200).optional().nullable(),
+        notes: z.string().trim().max(500).optional().nullable(),
+      })
+      .parse(req.body);
+    res.status(201).json(await createSupplier(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.post(
+  "/operations/inventory-adjustments",
+  async (req, res, next) => {
+    try {
+      const body = z
+        .object({
+          menuItemId: z.string().trim().min(1),
+          quantityDelta: z.number().int().min(-9999).max(9999),
+          reason: z.string().trim().min(1).max(120),
+          note: z.string().trim().max(300).optional().nullable(),
+        })
+        .parse(req.body);
+      res.status(201).json(await createInventoryAdjustment(body));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+manageRouter.post("/operations/members", async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        name: z.string().trim().max(120).optional().nullable(),
+        phone: z.string().trim().min(3).max(80),
+        email: z.string().trim().email().max(200).optional().nullable(),
+        points: z.number().int().min(0).max(999999).optional(),
+      })
+      .parse(req.body);
+    res.status(201).json(await createMember(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.post("/operations/coupons", async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        code: z.string().trim().min(2).max(40),
+        discountType: z.enum(["PERCENT", "AMOUNT"]),
+        discountValue: z.number().int().min(1).max(999999),
+        isActive: z.boolean().default(true),
+        startsAt: z.string().datetime().optional().nullable(),
+        endsAt: z.string().datetime().optional().nullable(),
+      })
+      .parse(req.body);
+    res.status(201).json(await createCoupon(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.post("/operations/kds-devices", async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        name: z.string().trim().min(1).max(120),
+        station: z.string().trim().max(80).optional().nullable(),
+        token: z.string().trim().max(160).optional(),
+        isActive: z.boolean().default(true),
+      })
+      .parse(req.body);
+    res.status(201).json(await createKdsDevice(body));
   } catch (error) {
     next(error);
   }

@@ -10,6 +10,13 @@ import {
 
 export const publicRouter = Router();
 
+const selectedModifierSchema = z.object({
+  groupId: z.string().trim().min(1),
+  optionId: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  priceDeltaCents: z.number().int(),
+});
+
 publicRouter.get("/menu", async (req, res, next) => {
   try {
     const query = z
@@ -42,9 +49,13 @@ publicRouter.post("/orders", async (req, res, next) => {
             z.object({
               menuItemId: z.string().trim().min(1),
               quantity: z.number().int().positive().max(20),
+              modifiers: z.array(selectedModifierSchema).optional(),
+              note: z.string().trim().max(200).optional().nullable(),
             }),
           )
           .min(1),
+        customerLanguage: z.enum(["en", "fr-CA", "zh-CN"]).optional(),
+        customerName: z.string().trim().max(120).optional().nullable(),
       })
       .parse(req.body);
     const order = await createOrder(body);
