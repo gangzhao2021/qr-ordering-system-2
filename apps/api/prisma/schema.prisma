@@ -1,0 +1,265 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OrderStatus {
+  SUBMITTED
+  CLOSED
+  CANCELED
+}
+
+enum OrderItemStatus {
+  PENDING
+  DONE
+  CANCELED
+}
+
+enum ServiceRequestType {
+  WATER
+  CALL_STAFF
+  FOLLOW_UP
+}
+
+enum ServiceRequestStatus {
+  PENDING
+  HANDLED
+  CANCELED
+}
+
+enum UserRole {
+  DEV
+  ADMIN
+  FOH
+  KITCHEN
+  PRINTER
+}
+
+enum PrintJobType {
+  ORDER_TICKET
+  REPRINT
+}
+
+enum PrintJobStatus {
+  PENDING
+  PRINTING
+  PRINTED
+  FAILED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  OTHER
+}
+
+model Store {
+  id                   String   @id @default(cuid())
+  name                 String   @unique
+  currency             String   @default("USD")
+  locale               String   @default("en-US")
+  timezone             String   @default("America/New_York")
+  address              String?
+  phone                String?
+  taxLabel             String   @default("Tax")
+  taxRateBps           Int      @default(0)
+  serviceChargeLabel   String   @default("Service charge")
+  serviceChargeRateBps Int      @default(0)
+  receiptFooter        String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  tables          DiningTable[]
+  categories      MenuCategory[]
+  items           MenuItem[]
+  orders          Order[]
+  serviceRequests ServiceRequest[]
+  users           User[]
+  printJobs       PrintJob[]
+  payments        Payment[]
+}
+
+model User {
+  id             String   @id @default(cuid())
+  storeId        String
+  email          String   @unique
+  name           String?
+  role           UserRole @default(FOH)
+  passwordHash   String
+  isActive       Boolean  @default(true)
+  sessionVersion Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([role])
+}
+
+model DiningTable {
+  id        String   @id @default(cuid())
+  storeId   String
+  number    String
+  name      String?
+  qrToken   String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store           Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orders          Order[]
+  serviceRequests ServiceRequest[]
+  printJobs       PrintJob[]
+  payments        Payment[]
+
+  @@unique([storeId, number])
+  @@index([storeId])
+}
+
+model MenuCategory {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items MenuItem[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+}
+
+model MenuItem {
+  id                String   @id @default(cuid())
+  storeId           String
+  categoryId        String
+  name              String
+  description       String?
+  priceCents        Int
+  isAvailable       Boolean  @default(true)
+  stockQuantity     Int?
+  lowStockThreshold Int      @default(0)
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  store      Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category   MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([isAvailable])
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  storeId     String
+  tableId     String
+  status      OrderStatus @default(SUBMITTED)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  submittedAt DateTime    @default(now())
+  closedAt    DateTime?
+
+  store Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  table DiningTable  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  items OrderItem[]
+  printJobs PrintJob[]
+
+  @@index([storeId])
+  @@index([tableId])
+  @@index([status])
+}
+
+model PrintJob {
+  id        String         @id @default(cuid())
+  storeId   String
+  orderId   String?
+  tableId   String?
+  type      PrintJobType   @default(ORDER_TICKET)
+  status    PrintJobStatus @default(PENDING)
+  attempts  Int            @default(0)
+  payload   Json
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  printedAt DateTime?
+  failedAt  DateTime?
+
+  store Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  order Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  table DiningTable? @relation(fields: [tableId], references: [id], onDelete: SetNull)
+
+  @@index([storeId])
+  @@index([status])
+  @@index([orderId])
+  @@index([tableId])
+  @@index([createdAt])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  storeId     String
+  tableId     String
+  method      PaymentMethod @default(CASH)
+  amountCents Int
+  currency    String
+  reference   String?
+  note        String?
+  orderIds    Json
+  paidAt      DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  store Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  table DiningTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([tableId])
+  @@index([paidAt])
+  @@index([method])
+}
+
+model OrderItem {
+  id                 String          @id @default(cuid())
+  orderId            String
+  menuItemId         String
+  nameSnapshot       String
+  priceCentsSnapshot Int
+  quantity           Int             @default(1)
+  status             OrderItemStatus @default(PENDING)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@index([orderId])
+  @@index([menuItemId])
+  @@index([status])
+}
+
+model ServiceRequest {
+  id        String               @id @default(cuid())
+  storeId   String
+  tableId   String
+  type      ServiceRequestType
+  status    ServiceRequestStatus @default(PENDING)
+  note      String?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  handledAt DateTime?
+
+  store Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  table DiningTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([tableId])
+  @@index([status])
+}

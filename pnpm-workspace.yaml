@@ -1,0 +1,14 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+verifyDepsBeforeRun: false
+confirmModulesPurge: false
+engineStrict: false
+managePackageManagerVersions: false
+packageManagerStrict: false
+allowBuilds:
+  "@prisma/engines": true
+  esbuild: true
+  prisma: true
+  sharp: true
