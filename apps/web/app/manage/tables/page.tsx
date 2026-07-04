@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { DiningTable, ManageTablesResponse } from "@qr2/shared";
 import { QrCode } from "../../../components/QrCode";
 import { apiFetch } from "../../../lib/api";
@@ -16,6 +16,8 @@ type TableDraft = {
   qrToken: string;
   isActive: boolean;
 };
+
+type TableFilter = "ALL" | "ACTIVE" | "INACTIVE";
 
 function draftFromTable(table: DiningTable): TableDraft {
   return {
@@ -34,16 +36,30 @@ export default function ManageTablesPage() {
   const [number, setNumber] = useState("");
   const [name, setName] = useState("");
   const [qrToken, setQrToken] = useState("");
+  const [filter, setFilter] = useState<TableFilter>("ALL");
+  const [selectedTableIds, setSelectedTableIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
     setError(null);
+    setCopyMessage(null);
     try {
       const result = await apiFetch<ManageTablesResponse>("/v1/manage/tables");
       setData(result);
       setDrafts(
         Object.fromEntries(
           result.tables.map((table) => [table.id, draftFromTable(table)]),
+        ),
+      );
+      setSelectedTableIds((current) =>
+        Object.fromEntries(
+          result.tables.map((table) => [
+            table.id,
+            current[table.id] ?? table.isActive,
+          ]),
         ),
       );
     } catch (err) {
@@ -74,6 +90,26 @@ export default function ManageTablesPage() {
         [tableId]: { ...existing, ...patch },
       };
     });
+  }
+
+  function setPrintSelection(tableId: string, selected: boolean) {
+    setSelectedTableIds((current) => ({ ...current, [tableId]: selected }));
+  }
+
+  function selectActiveTables() {
+    setSelectedTableIds(
+      Object.fromEntries(
+        (data?.tables ?? []).map((table) => [table.id, table.isActive]),
+      ),
+    );
+  }
+
+  function clearPrintSelection() {
+    setSelectedTableIds(
+      Object.fromEntries(
+        (data?.tables ?? []).map((table) => [table.id, false]),
+      ),
+    );
   }
 
   async function createTable(event: FormEvent) {
@@ -142,12 +178,34 @@ export default function ManageTablesPage() {
 
   async function copyLink(table: DiningTable) {
     setError(null);
+    setCopyMessage(null);
     try {
       await navigator.clipboard.writeText(tableHref(table));
+      setCopyMessage(`Copied link for table ${table.number}.`);
     } catch {
       setError("Could not copy link from this browser session");
     }
   }
+
+  const tables = useMemo(() => data?.tables ?? [], [data?.tables]);
+  const activeTables = useMemo(
+    () => tables.filter((table) => table.isActive),
+    [tables],
+  );
+  const inactiveTables = useMemo(
+    () => tables.filter((table) => !table.isActive),
+    [tables],
+  );
+  const selectedTables = useMemo(
+    () => tables.filter((table) => selectedTableIds[table.id]),
+    [selectedTableIds, tables],
+  );
+  const filteredTables = useMemo(() => {
+    if (filter === "ACTIVE") return activeTables;
+    if (filter === "INACTIVE") return inactiveTables;
+    return tables;
+  }, [activeTables, filter, inactiveTables, tables]);
+  const printableTables = selectedTables.length > 0 ? selectedTables : [];
 
   return (
     <AuthGate state={auth}>
@@ -161,12 +219,38 @@ export default function ManageTablesPage() {
                 Manage table tokens, active status, and printable table cards.
               </p>
             </div>
-            <button className="btn primary" onClick={() => window.print()}>
-              Print cards
+            <button
+              className="btn primary"
+              disabled={printableTables.length === 0}
+              onClick={() => window.print()}
+            >
+              Print selected
             </button>
           </div>
         </section>
         {error ? <div className="error card no-print">{error}</div> : null}
+        {copyMessage ? (
+          <div className="success card no-print">{copyMessage}</div>
+        ) : null}
+
+        <section className="foh-metric-grid table-summary no-print">
+          <article className="card metric-card">
+            <span className="meta">Total tables</span>
+            <strong>{tables.length}</strong>
+          </article>
+          <article className="card metric-card">
+            <span className="meta">Active QR entries</span>
+            <strong>{activeTables.length}</strong>
+          </article>
+          <article className="card metric-card">
+            <span className="meta">Inactive tables</span>
+            <strong>{inactiveTables.length}</strong>
+          </article>
+          <article className="card metric-card">
+            <span className="meta">Cards selected</span>
+            <strong>{selectedTables.length}</strong>
+          </article>
+        </section>
 
         <section className="grid two no-print table-management">
           <form
@@ -206,16 +290,74 @@ export default function ManageTablesPage() {
           </form>
 
           <div className="grid">
-            {(data?.tables ?? []).map((table) => {
+            <section className="card table-toolbar">
+              <div className="row between">
+                <div>
+                  <h2>Table cards</h2>
+                  <p>Select the cards that should print for the dining room.</p>
+                </div>
+                <div className="row">
+                  {(["ALL", "ACTIVE", "INACTIVE"] as const).map((option) => (
+                    <button
+                      className={filter === option ? "btn primary" : "btn"}
+                      key={option}
+                      type="button"
+                      aria-pressed={filter === option}
+                      onClick={() => setFilter(option)}
+                    >
+                      {option === "ALL"
+                        ? "All"
+                        : option === "ACTIVE"
+                          ? "Active"
+                          : "Inactive"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="row">
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={selectActiveTables}
+                >
+                  Select active
+                </button>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={clearPrintSelection}
+                >
+                  Clear selection
+                </button>
+                <span className="meta">
+                  {selectedTables.length} selected for print
+                </span>
+              </div>
+            </section>
+
+            {filteredTables.map((table) => {
               const draft = drafts[table.id] ?? draftFromTable(table);
               return (
                 <article className="card table-editor" key={table.id}>
                   <div className="row between">
-                    <h2>Table {table.number}</h2>
+                    <div>
+                      <h2>Table {table.number}</h2>
+                      {table.name ? <p>{table.name}</p> : null}
+                    </div>
                     <span className={table.isActive ? "status ok" : "status"}>
                       {table.isActive ? "Active" : "Inactive"}
                     </span>
                   </div>
+                  <label className="mini-check table-print-check">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedTableIds[table.id])}
+                      onChange={(event) =>
+                        setPrintSelection(table.id, event.target.checked)
+                      }
+                    />
+                    Print this table card
+                  </label>
                   <div className="table-controls">
                     <label className="field">
                       <span>Number</span>
@@ -261,6 +403,7 @@ export default function ManageTablesPage() {
                     />
                   </label>
                   <div className="token-row">
+                    <span>Saved customer link</span>
                     <code>{tableHref(table)}</code>
                   </div>
                   <div className="qr-preview">
@@ -278,18 +421,21 @@ export default function ManageTablesPage() {
                   <div className="row">
                     <button
                       className="btn primary"
+                      type="button"
                       onClick={() => void saveTable(table)}
                     >
                       Save
                     </button>
                     <button
                       className="btn"
+                      type="button"
                       onClick={() => void rotateQr(table)}
                     >
                       Rotate QR
                     </button>
                     <button
                       className="btn ghost"
+                      type="button"
                       onClick={() => void copyLink(table)}
                     >
                       Copy link
@@ -299,6 +445,7 @@ export default function ManageTablesPage() {
                     </a>
                     <button
                       className="btn ghost"
+                      type="button"
                       onClick={() => void deleteTable(table)}
                     >
                       Delete unused
@@ -307,13 +454,19 @@ export default function ManageTablesPage() {
                 </article>
               );
             })}
+            {filteredTables.length === 0 ? (
+              <article className="card">
+                <h2>No tables match this filter</h2>
+                <p>Switch filters or add a new table.</p>
+              </article>
+            ) : null}
           </div>
         </section>
 
         <section className="print-sheet">
           <h1>{data?.store.name ?? "Restaurant"} Table Cards</h1>
           <div className="print-grid">
-            {(data?.tables ?? []).map((table) => (
+            {printableTables.map((table) => (
               <article className="print-card" key={table.id}>
                 <div>
                   <span className="meta">Dine-in ordering</span>

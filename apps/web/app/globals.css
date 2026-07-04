@@ -969,6 +969,27 @@ textarea {
   gap: 14px;
 }
 
+.table-summary {
+  margin-bottom: 16px;
+}
+
+.table-toolbar {
+  align-content: start;
+  gap: 14px;
+}
+
+.table-toolbar .row:first-child {
+  align-items: flex-start;
+}
+
+.table-print-check {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafaf8;
+  padding: 8px 10px;
+}
+
 .table-controls {
   display: grid;
   grid-template-columns: minmax(92px, 0.8fr) minmax(140px, 1fr) auto;
@@ -1042,6 +1063,8 @@ textarea {
 }
 
 .token-row {
+  display: grid;
+  gap: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fafaf8;
@@ -1049,6 +1072,13 @@ textarea {
   color: var(--muted);
   font-size: 13px;
   word-break: break-all;
+}
+
+.token-row span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .qr-preview {
