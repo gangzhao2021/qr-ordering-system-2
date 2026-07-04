@@ -9,6 +9,7 @@ import type {
   Member,
   Supplier,
 } from "@qr2/shared";
+import { formatCents } from "@qr2/shared";
 import { apiFetch } from "../../../lib/api";
 import {
   AuthGate,
@@ -43,6 +44,7 @@ type CouponForm = {
   code: string;
   discountType: "PERCENT" | "AMOUNT";
   discountValue: string;
+  minimumSubtotalCents: string;
   isActive: boolean;
   startsAt: string;
   endsAt: string;
@@ -82,6 +84,7 @@ const initialCoupon: CouponForm = {
   code: "",
   discountType: "PERCENT",
   discountValue: "10",
+  minimumSubtotalCents: "0",
   isActive: true,
   startsAt: "",
   endsAt: "",
@@ -152,6 +155,7 @@ function couponForm(entry: Coupon): CouponForm {
     code: entry.code,
     discountType: entry.discountType,
     discountValue: String(entry.discountValue),
+    minimumSubtotalCents: String(entry.minimumSubtotalCents),
     isActive: entry.isActive,
     startsAt: isoToDatetimeLocal(entry.startsAt),
     endsAt: isoToDatetimeLocal(entry.endsAt),
@@ -329,6 +333,7 @@ export default function ManageOperationsPage() {
           code: coupon.code,
           discountType: coupon.discountType,
           discountValue: Number(coupon.discountValue || 0),
+          minimumSubtotalCents: Number(coupon.minimumSubtotalCents || 0),
           isActive: coupon.isActive,
           startsAt: datetimeLocalToIso(coupon.startsAt),
           endsAt: datetimeLocalToIso(coupon.endsAt),
@@ -443,6 +448,7 @@ export default function ManageOperationsPage() {
           code: draft.code,
           discountType: draft.discountType,
           discountValue: Number(draft.discountValue || 0),
+          minimumSubtotalCents: Number(draft.minimumSubtotalCents || 0),
           isActive: draft.isActive,
           startsAt: datetimeLocalToIso(draft.startsAt),
           endsAt: datetimeLocalToIso(draft.endsAt),
@@ -758,6 +764,20 @@ export default function ManageOperationsPage() {
                   }
                 />
               </label>
+              <label className="field">
+                <span>Minimum subtotal</span>
+                <input
+                  className="input"
+                  value={coupon.minimumSubtotalCents}
+                  inputMode="numeric"
+                  onChange={(event) =>
+                    setCoupon((current) => ({
+                      ...current,
+                      minimumSubtotalCents: event.target.value,
+                    }))
+                  }
+                />
+              </label>
               <label className="field checkbox-field">
                 <span>Active</span>
                 <input
@@ -1006,7 +1026,25 @@ export default function ManageOperationsPage() {
                   <div className="operations-record-card" key={entry.id}>
                     <div className="row between">
                       <strong>{entry.name || entry.phone}</strong>
-                      <span className="status ok">{entry.points} pts</span>
+                      <div className="row">
+                        <span className="status ok">{entry.points} pts</span>
+                        <span className="status">
+                          {entry.paymentCount ?? 0} payments
+                        </span>
+                      </div>
+                    </div>
+                    <div className="row between">
+                      <span className="meta">
+                        Spend{" "}
+                        {formatCents(
+                          entry.totalSpendCents ?? 0,
+                          operations?.store.currency,
+                          operations?.store.locale,
+                        )}
+                      </span>
+                      <span className="meta">
+                        Last {formatDateTime(entry.lastPaidAt)}
+                      </span>
                     </div>
                     <div className="operations-record-grid">
                       <label className="field">
@@ -1085,9 +1123,24 @@ export default function ManageOperationsPage() {
                   <div className="operations-record-card" key={entry.id}>
                     <div className="row between">
                       <strong>{entry.code}</strong>
-                      <span className={draft.isActive ? "status ok" : "status"}>
-                        {draft.isActive ? "Active" : "Inactive"}
-                      </span>
+                      <div className="row">
+                        <span
+                          className={draft.isActive ? "status ok" : "status"}
+                        >
+                          {draft.isActive ? "Active" : "Inactive"}
+                        </span>
+                        <span className="status">
+                          {entry.redemptionCount ?? 0} used
+                        </span>
+                      </div>
+                    </div>
+                    <div className="meta">
+                      Minimum{" "}
+                      {formatCents(
+                        entry.minimumSubtotalCents,
+                        operations?.store.currency,
+                        operations?.store.locale,
+                      )}
                     </div>
                     <div className="operations-record-grid">
                       <label className="field">
@@ -1127,6 +1180,19 @@ export default function ManageOperationsPage() {
                           onChange={(event) =>
                             updateCouponDraft(entry.id, {
                               discountValue: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Minimum subtotal</span>
+                        <input
+                          className="input"
+                          inputMode="numeric"
+                          value={draft.minimumSubtotalCents}
+                          onChange={(event) =>
+                            updateCouponDraft(entry.id, {
+                              minimumSubtotalCents: event.target.value,
                             })
                           }
                         />

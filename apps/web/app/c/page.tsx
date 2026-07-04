@@ -77,6 +77,10 @@ const labels = {
     allergens: "Allergens",
     cartTitle: "Review cart",
     cartHelp: "Adjust quantities before sending this table order.",
+    customerName: "Name",
+    customerPhone: "Member phone",
+    couponCode: "Coupon code",
+    discount: "Discount",
     decrease: "Decrease",
     increase: "Increase",
     remove: "Remove",
@@ -153,6 +157,10 @@ const labels = {
     allergens: "Allergenes",
     cartTitle: "Verifier le panier",
     cartHelp: "Ajustez les quantites avant d'envoyer la commande.",
+    customerName: "Nom",
+    customerPhone: "Telephone membre",
+    couponCode: "Code promo",
+    discount: "Rabais",
     decrease: "Diminuer",
     increase: "Augmenter",
     remove: "Retirer",
@@ -228,6 +236,10 @@ const labels = {
     allergens: "过敏原",
     cartTitle: "确认购物车",
     cartHelp: "提交前可调整数量。",
+    customerName: "姓名",
+    customerPhone: "会员手机号",
+    couponCode: "优惠码",
+    discount: "优惠",
     decrease: "减少",
     increase: "增加",
     remove: "移除",
@@ -349,6 +361,9 @@ function CustomerExperience() {
   const [menu, setMenu] = useState<PublicMenuResponse | null>(null);
   const [orders, setOrders] = useState<PublicOrdersResponse | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [couponCode, setCouponCode] = useState("");
   const [query, setQuery] = useState("");
   const [modifierDrafts, setModifierDrafts] = useState<
     Record<string, Record<string, string[]>>
@@ -578,6 +593,9 @@ function CustomerExperience() {
           body: JSON.stringify({
             qrToken,
             customerLanguage: language,
+            customerName: customerName.trim() || null,
+            customerPhone: customerPhone.trim() || null,
+            couponCode: couponCode.trim() || null,
             items: cart.map((line) => ({
               menuItemId: line.menuItemId,
               quantity: line.quantity,
@@ -592,6 +610,7 @@ function CustomerExperience() {
       );
       await refreshOrders();
       setCart([]);
+      setCouponCode("");
       setMenu(refreshed);
       setNotice(`${t.orderSent}: ${response.orderId.slice(0, 8)}`);
     } catch (err) {
@@ -1123,6 +1142,21 @@ function CustomerExperience() {
                   </span>
                 </div>
               ) : null}
+              {orders.openTotals.discountCents > 0 ? (
+                <div className="row between">
+                  <span className="meta">
+                    {orders.openTotals.discountLabel || t.discount}
+                  </span>
+                  <span>
+                    -
+                    {formatCents(
+                      orders.openTotals.discountCents,
+                      orders.store.currency,
+                      orders.store.locale,
+                    )}
+                  </span>
+                </div>
+              ) : null}
               <div className="row between">
                 <span className="meta">{t.openTotal}</span>
                 <strong>
@@ -1239,6 +1273,21 @@ function CustomerExperience() {
                         </div>
                       ))}
                     </div>
+                    {order.totals.discountCents > 0 ? (
+                      <div className="row between">
+                        <span className="meta">
+                          {order.totals.discountLabel || t.discount}
+                        </span>
+                        <span className="meta">
+                          -
+                          {formatCents(
+                            order.totals.discountCents,
+                            orders.store.currency,
+                            orders.store.locale,
+                          )}
+                        </span>
+                      </div>
+                    ) : null}
                     <div className="row between">
                       <span className="meta">{t.total}</span>
                       <strong>
@@ -1294,6 +1343,38 @@ function CustomerExperience() {
                   {t.sendOrder}
                 </button>
               </div>
+            </div>
+            <div className="checkout-controls customer-checkout-controls">
+              <label className="field">
+                <span>{t.customerName}</span>
+                <input
+                  className="input"
+                  value={customerName}
+                  maxLength={120}
+                  onChange={(event) => setCustomerName(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>{t.customerPhone}</span>
+                <input
+                  className="input"
+                  value={customerPhone}
+                  maxLength={80}
+                  inputMode="tel"
+                  onChange={(event) => setCustomerPhone(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>{t.couponCode}</span>
+                <input
+                  className="input"
+                  value={couponCode}
+                  maxLength={40}
+                  onChange={(event) =>
+                    setCouponCode(event.target.value.toUpperCase())
+                  }
+                />
+              </label>
             </div>
             <div className="list compact-list">
               {cart.map((line, index) => (

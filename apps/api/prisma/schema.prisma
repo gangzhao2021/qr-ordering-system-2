@@ -110,6 +110,8 @@ model Store {
   inventoryAdjustments InventoryAdjustment[]
   members              Member[]
   coupons              Coupon[]
+  couponRedemptions    CouponRedemption[]
+  memberPointLedger    MemberPointLedger[]
   kdsDevices           KdsDevice[]
   auditLogs            AuditLog[]
   feedback             Feedback[]
@@ -211,15 +213,27 @@ model Order {
   updatedAt   DateTime    @updatedAt
   submittedAt DateTime    @default(now())
   closedAt    DateTime?
+  customerName String?
+  customerPhone String?
+  memberId    String?
+  couponId    String?
+  couponCodeSnapshot String?
+  couponDiscountCents Int @default(0)
+  couponDiscountLabel String?
 
   store Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
   table DiningTable  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  member Member?     @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  coupon Coupon?     @relation(fields: [couponId], references: [id], onDelete: SetNull)
   items OrderItem[]
   printJobs PrintJob[]
+  couponRedemptions CouponRedemption[]
 
   @@index([storeId])
   @@index([tableId])
   @@index([status])
+  @@index([memberId])
+  @@index([couponId])
 }
 
 model PrintJob {
@@ -259,17 +273,32 @@ model Payment {
   reference   String?
   note        String?
   orderIds    Json
+  memberId    String?
+  memberPhoneSnapshot String?
+  memberNameSnapshot String?
+  couponId    String?
+  couponCodeSnapshot String?
+  manualDiscountCents Int @default(0)
+  couponDiscountCents Int @default(0)
+  tipCents    Int @default(0)
+  pointsEarned Int @default(0)
   paidAt      DateTime      @default(now())
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   store Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
   table DiningTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  member Member?    @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  coupon Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponRedemptions CouponRedemption[]
+  pointLedgerEntries MemberPointLedger[]
 
   @@index([storeId])
   @@index([tableId])
   @@index([paidAt])
   @@index([method])
+  @@index([memberId])
+  @@index([couponId])
 }
 
 model OrderItem {
@@ -405,6 +434,10 @@ model Member {
   updatedAt DateTime @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orders Order[]
+  payments Payment[]
+  couponRedemptions CouponRedemption[]
+  pointLedgerEntries MemberPointLedger[]
 
   @@index([storeId])
   @@unique([storeId, phone])
@@ -416,6 +449,7 @@ model Coupon {
   code          String
   discountType  String   @default("PERCENT")
   discountValue Int
+  minimumSubtotalCents Int @default(0)
   isActive      Boolean  @default(true)
   startsAt      DateTime?
   endsAt        DateTime?
@@ -423,9 +457,55 @@ model Coupon {
   updatedAt     DateTime @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orders Order[]
+  payments Payment[]
+  redemptions CouponRedemption[]
 
   @@index([storeId])
   @@unique([storeId, code])
+}
+
+model CouponRedemption {
+  id            String   @id @default(cuid())
+  storeId       String
+  couponId      String
+  memberId      String?
+  orderId       String?
+  paymentId     String?
+  codeSnapshot  String
+  discountCents Int
+  subtotalCents Int
+  redeemedAt    DateTime @default(now())
+
+  store   Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  coupon  Coupon   @relation(fields: [couponId], references: [id])
+  member  Member?  @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  order   Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([storeId])
+  @@index([couponId])
+  @@index([memberId])
+  @@index([orderId])
+  @@index([paymentId])
+}
+
+model MemberPointLedger {
+  id          String   @id @default(cuid())
+  storeId     String
+  memberId    String
+  paymentId   String?
+  pointsDelta Int
+  reason      String
+  createdAt   DateTime @default(now())
+
+  store   Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  member  Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([storeId])
+  @@index([memberId])
+  @@index([paymentId])
 }
 
 model KdsDevice {

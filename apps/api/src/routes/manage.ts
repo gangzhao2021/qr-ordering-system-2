@@ -147,6 +147,7 @@ const couponBodySchema = z.object({
   code: z.string().trim().min(2).max(40),
   discountType: z.enum(["PERCENT", "AMOUNT"]),
   discountValue: z.number().int().min(1).max(999999),
+  minimumSubtotalCents: z.number().int().min(0).max(99999999).default(0),
   isActive: z.boolean().default(true),
   startsAt: z.string().datetime().optional().nullable(),
   endsAt: z.string().datetime().optional().nullable(),

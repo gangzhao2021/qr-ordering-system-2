@@ -23,6 +23,7 @@ pnpm dev
 - Unit tests: `pnpm test`
 - P0 smoke against a running API: `pnpm smoke:p0`
 - P1 purchasing smoke against a running API: `pnpm smoke:p1`
+- P1 member/coupon smoke against a running API: `pnpm smoke:p1-members`
 - P0 closeout checklist: `docs/P0_EXIT_CRITERIA.md`
 
 This repo includes `.npmrc` settings that use a hoisted/copy install strategy. That is slower than
@@ -41,6 +42,11 @@ Use `docs/P0_EXIT_CRITERIA.md` as the canonical gate for deciding whether P0 is 
 `pnpm smoke:p1` also expects a running API. It creates a real purchase order, receives it in
 two steps, verifies FOH cannot create management purchase orders, and confirms received stock
 updates the menu item quantity with linked inventory movement rows.
+
+`pnpm smoke:p1-members` expects a running API. It creates a real coupon, places a customer
+order with a member phone and coupon code, closes the table through FOH, then verifies payment
+member snapshots, coupon discount, earned points, member spend aggregation, and coupon redemption
+count.
 
 `pnpm test` runs package unit tests for shared contracts, API auth/session helpers, and web
 request/component behavior. It does not start the database or browser.
@@ -98,9 +104,9 @@ token.
 
 FOH checkout records a payment when closing a table. The default payment amount is the table's
 open total, with support for cash, card, Interac, Stripe, WeChat Pay, Alipay, UnionPay, gift card,
-or other payment method plus optional reference, tip, discount, and refund records. External
-gateway capture/reconciliation is still a future integration; current payment flows are local
-operating records.
+or other payment method plus optional reference, tip, manual discount, member phone, coupon code,
+coupon discount, points earned, and refund records. External gateway capture/reconciliation is
+still a future integration; current payment flows are local operating records.
 
 Management analytics uses existing payments, orders, and order items to show a 7/14/31 day
 operating readout: revenue, payment mix, order counts, daily revenue, and top items.
@@ -129,8 +135,10 @@ history should be deactivated; hard delete is limited to unused tables.
 Store settings include Canada and China presets, supported languages, invoice instructions,
 tax-rule JSON, price-includes-tax behavior, enabled payment methods, and tip settings.
 
-Operations management covers supplier contacts, stock adjustment history, member records, coupon
-records, KDS device tokens, and audit history. Purchasing adds P1 purchase orders and receiving:
-received quantities update menu item stock and create linked inventory movement rows. Recipe BOM
-costing, supplier invoices, customer-facing coupon redemption, and real payment gateway
-reconciliation remain later-phase work.
+Operations management covers supplier contacts, stock adjustment history, member records with
+payment/spend summaries, coupon records with minimum subtotals and redemption counts, KDS device
+tokens, and audit history. Purchasing adds P1 purchase orders and receiving: received quantities
+update menu item stock and create linked inventory movement rows. Customer-facing membership now
+supports optional phone capture, coupon redemption at order/checkout, and points accrual on paid
+FOH checkout. Recipe BOM costing, supplier invoices, customer profile history, feedback, marketing
+automation, and real payment gateway reconciliation remain later-phase work.

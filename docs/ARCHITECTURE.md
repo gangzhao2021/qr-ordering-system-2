@@ -39,7 +39,7 @@ The public `/v1/public/orders` endpoint is scoped by table QR token and returns 
 
 ## Checkout And Payments
 
-FOH checkout closes all submitted orders for a table only when no order items are pending. If the table total is greater than zero, checkout creates a `Payment` record with method, amount, currency, optional reference, tip, discount, and the closed order ids. Recent payments are visible in the FOH workspace. Refunds update local payment status and write audit records; live third-party payment capture is intentionally not coupled to P0.
+FOH checkout closes all submitted orders for a table only when no order items are pending. If the table total is greater than zero, checkout creates a `Payment` record with method, amount, currency, optional reference, tip, manual discount, coupon discount, member snapshot, points earned, and the closed order ids. Recent payments are visible in the FOH workspace. Refunds update local payment status and write audit records; live third-party payment capture is intentionally not coupled to P0.
 
 ## Management Analytics
 
@@ -57,9 +57,11 @@ Customer order items snapshot the selected modifier names, modifier price deltas
 
 ## Store Operations
 
-Management operations are lightweight transactional records in the API database: suppliers, inventory adjustments, members, coupons, KDS device tokens, and audit logs. Inventory adjustments update tracked `MenuItem.stockQuantity` and keep a recent adjustment history. Coupons and members are management records only in P0; customer redemption and points accrual are later workflow work.
+Management operations are lightweight transactional records in the API database: suppliers, inventory adjustments, members, coupons, KDS device tokens, and audit logs. Inventory adjustments update tracked `MenuItem.stockQuantity` and keep a recent adjustment history.
 
 P1 purchasing adds `PurchaseOrder` and `PurchaseOrderLine` records. Management can create an ordered purchase order against an active supplier, then receive each line partially or fully. Receiving increments `MenuItem.stockQuantity`, creates linked `InventoryAdjustment` rows, and moves the purchase order to `PARTIALLY_RECEIVED` or `RECEIVED`. Unit cost is stored for receiving context only; recipe/BOM costing and supplier invoice reconciliation remain later-phase work.
+
+P1 member/coupon checkout lets customer orders include an optional name, phone, and coupon code. The API upserts a member from phone, snapshots coupon discount on the order, and includes coupon discounts in public/FOH table totals and print ticket totals. FOH can also attach a member phone or coupon at checkout. Successful paid checkout increments member points, writes a `MemberPointLedger` row, and records `CouponRedemption` rows for operations reporting. Coupon rules intentionally stay simple: active window, minimum subtotal, fixed amount or percentage discount, and one redemption per member.
 
 KDS device records provide token and station inventory for device setup. The current kitchen page is still staff-session based and read-only; device-token heartbeat and station authorization are later-phase hardening.
 

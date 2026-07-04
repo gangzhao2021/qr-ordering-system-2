@@ -198,6 +198,8 @@ export type OrderTotals = {
   taxCents: number;
   taxLines: TaxLine[];
   includedTaxCents: number;
+  discountCents: number;
+  discountLabel?: string | null;
   totalCents: number;
   serviceChargeRateBps: number;
   taxRateBps: number;
@@ -324,6 +326,12 @@ export type Order = {
   createdAt: string;
   submittedAt: string;
   closedAt?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  memberId?: string | null;
+  couponCode?: string | null;
+  couponDiscountCents: number;
+  couponDiscountLabel?: string | null;
   items: OrderItem[];
 };
 
@@ -343,6 +351,14 @@ export type Payment = {
   reference?: string | null;
   note?: string | null;
   orderIds: string[];
+  memberId?: string | null;
+  memberPhone?: string | null;
+  memberName?: string | null;
+  couponCode?: string | null;
+  manualDiscountCents: number;
+  couponDiscountCents: number;
+  tipCents: number;
+  pointsEarned: number;
   paidAt: string;
   createdAt: string;
 };
@@ -352,6 +368,9 @@ export type CheckoutTableRequest = {
   amountCents?: number;
   tipCents?: number;
   discountCents?: number;
+  memberPhone?: string | null;
+  memberName?: string | null;
+  couponCode?: string | null;
   reference?: string | null;
   note?: string | null;
 };
@@ -426,6 +445,8 @@ export type CreateOrderRequest = {
   }>;
   customerLanguage?: LanguageCode;
   customerName?: string | null;
+  customerPhone?: string | null;
+  couponCode?: string | null;
 };
 
 export type CreateOrderResponse = {
@@ -576,6 +597,9 @@ export type Member = {
   phone: string;
   email?: string | null;
   points: number;
+  paymentCount?: number;
+  totalSpendCents?: number;
+  lastPaidAt?: string | null;
   createdAt: string;
 };
 
@@ -584,9 +608,11 @@ export type Coupon = {
   code: string;
   discountType: "PERCENT" | "AMOUNT";
   discountValue: number;
+  minimumSubtotalCents: number;
   isActive: boolean;
   startsAt?: string | null;
   endsAt?: string | null;
+  redemptionCount?: number;
 };
 
 export type KdsDevice = {
@@ -738,7 +764,13 @@ export type UpdateMemberRequest = Partial<
 
 export type CreateCouponRequest = Pick<
   Coupon,
-  "code" | "discountType" | "discountValue" | "isActive" | "startsAt" | "endsAt"
+  | "code"
+  | "discountType"
+  | "discountValue"
+  | "minimumSubtotalCents"
+  | "isActive"
+  | "startsAt"
+  | "endsAt"
 >;
 export type UpdateCouponRequest = Partial<CreateCouponRequest>;
 

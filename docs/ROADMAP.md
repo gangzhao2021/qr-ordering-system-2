@@ -24,8 +24,9 @@
 ## P1 - Store Operations
 
 - Purchase orders and supplier receiving tied to menu item stock
+- Customer-facing member phone capture, coupon redemption, payment points, and operations summaries
 - Recipes/BOM costing and stocktake workflow
-- Customer-facing members, coupons, points, feedback, and customer profile
+- Customer feedback and richer customer profile history
 
 ## P2 - Platform And Scale
 

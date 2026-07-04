@@ -88,6 +88,9 @@ fohRouter.post("/tables/:tableId/checkout", async (req, res, next) => {
         amountCents: z.number().int().min(0).optional(),
         tipCents: z.number().int().min(0).optional(),
         discountCents: z.number().int().min(0).optional(),
+        memberPhone: z.string().trim().max(80).optional().nullable(),
+        memberName: z.string().trim().max(120).optional().nullable(),
+        couponCode: z.string().trim().max(40).optional().nullable(),
         reference: z.string().trim().max(120).optional().nullable(),
         note: z.string().trim().max(300).optional().nullable(),
       })

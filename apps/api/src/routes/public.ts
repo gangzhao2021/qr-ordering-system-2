@@ -56,6 +56,8 @@ publicRouter.post("/orders", async (req, res, next) => {
           .min(1),
         customerLanguage: z.enum(["en", "fr-CA", "zh-CN"]).optional(),
         customerName: z.string().trim().max(120).optional().nullable(),
+        customerPhone: z.string().trim().max(80).optional().nullable(),
+        couponCode: z.string().trim().max(40).optional().nullable(),
       })
       .parse(req.body);
     const order = await createOrder(body);

@@ -1,4 +1,5 @@
-import { randomBytes } from "node:crypto";
+﻿import { randomBytes } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import type {
   AuditLog,
   CheckoutTableRequest,
@@ -178,6 +179,13 @@ type OrderRecord = {
   createdAt: Date;
   submittedAt: Date;
   closedAt: Date | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  memberId: string | null;
+  couponId: string | null;
+  couponCodeSnapshot: string | null;
+  couponDiscountCents: number;
+  couponDiscountLabel: string | null;
   items: OrderItemRecord[];
 };
 
@@ -216,6 +224,15 @@ type PaymentRecord = {
   reference: string | null;
   note: string | null;
   orderIds: unknown;
+  memberId: string | null;
+  memberPhoneSnapshot: string | null;
+  memberNameSnapshot: string | null;
+  couponId: string | null;
+  couponCodeSnapshot: string | null;
+  manualDiscountCents: number;
+  couponDiscountCents: number;
+  tipCents: number;
+  pointsEarned: number;
   paidAt: Date;
   createdAt: Date;
   table?: { number: string } | null;
@@ -521,6 +538,12 @@ function mapOrder(order: OrderRecord): Order {
     createdAt: toIso(order.createdAt),
     submittedAt: toIso(order.submittedAt),
     closedAt: optionalIso(order.closedAt),
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    memberId: order.memberId,
+    couponCode: order.couponCodeSnapshot,
+    couponDiscountCents: order.couponDiscountCents,
+    couponDiscountLabel: order.couponDiscountLabel,
     items: order.items.map(mapOrderItem),
   };
 }
@@ -572,6 +595,14 @@ function mapPayment(payment: PaymentRecord): Payment {
     reference: payment.reference,
     note: payment.note,
     orderIds,
+    memberId: payment.memberId,
+    memberPhone: payment.memberPhoneSnapshot,
+    memberName: payment.memberNameSnapshot,
+    couponCode: payment.couponCodeSnapshot,
+    manualDiscountCents: payment.manualDiscountCents,
+    couponDiscountCents: payment.couponDiscountCents,
+    tipCents: payment.tipCents,
+    pointsEarned: payment.pointsEarned,
     paidAt: toIso(payment.paidAt),
     createdAt: toIso(payment.createdAt),
   };
@@ -676,6 +707,9 @@ function mapMember(member: {
   email: string | null;
   points: number;
   createdAt: Date;
+  paymentCount?: number;
+  totalSpendCents?: number;
+  lastPaidAt?: Date | string | null;
 }): Member {
   return {
     id: member.id,
@@ -683,6 +717,12 @@ function mapMember(member: {
     phone: member.phone,
     email: member.email,
     points: member.points,
+    paymentCount: member.paymentCount,
+    totalSpendCents: member.totalSpendCents,
+    lastPaidAt:
+      member.lastPaidAt instanceof Date
+        ? toIso(member.lastPaidAt)
+        : (member.lastPaidAt ?? null),
     createdAt: toIso(member.createdAt),
   };
 }
@@ -692,18 +732,22 @@ function mapCoupon(coupon: {
   code: string;
   discountType: string;
   discountValue: number;
+  minimumSubtotalCents: number;
   isActive: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
+  redemptionCount?: number;
 }): Coupon {
   return {
     id: coupon.id,
     code: coupon.code,
     discountType: coupon.discountType === "AMOUNT" ? "AMOUNT" : "PERCENT",
     discountValue: coupon.discountValue,
+    minimumSubtotalCents: coupon.minimumSubtotalCents,
     isActive: coupon.isActive,
     startsAt: optionalIso(coupon.startsAt),
     endsAt: optionalIso(coupon.endsAt),
+    redemptionCount: coupon.redemptionCount,
   };
 }
 
@@ -750,6 +794,9 @@ function buildOrderTicketPayload(input: {
     id: string;
     createdAt: Date;
     submittedAt: Date;
+    couponDiscountCents?: number;
+    couponDiscountLabel?: string | null;
+    couponCodeSnapshot?: string | null;
     items: OrderItemRecord[];
   };
 }) {
@@ -782,12 +829,22 @@ function buildOrderTicketPayload(input: {
         note: item.note,
         status: item.status,
       })),
-      totals: calculateTotals(input.order.items, input.store),
+      totals: calculateTotals(
+        input.order.items,
+        input.store,
+        input.order.couponDiscountCents ?? 0,
+        input.order.couponDiscountLabel ?? input.order.couponCodeSnapshot,
+      ),
     },
   };
 }
 
-function itemSubtotal(item: OrderItemRecord) {
+type TotalsLine = Pick<
+  OrderItemRecord,
+  "priceCentsSnapshot" | "modifierTotalCentsSnapshot" | "quantity" | "status"
+>;
+
+function itemSubtotal(item: TotalsLine) {
   if (item.status === "CANCELED") return 0;
   return (
     (item.priceCentsSnapshot + item.modifierTotalCentsSnapshot) * item.quantity
@@ -795,8 +852,10 @@ function itemSubtotal(item: OrderItemRecord) {
 }
 
 function calculateTotals(
-  items: OrderItemRecord[],
+  items: TotalsLine[],
   store: StoreRecord,
+  discountCents = 0,
+  discountLabel?: string | null,
 ): OrderTotals {
   const subtotalCents = items.reduce(
     (sum, item) => sum + itemSubtotal(item),
@@ -827,16 +886,23 @@ function calculateTotals(
   const taxCents = store.priceIncludesTax
     ? includedTaxCents
     : taxLines.reduce((sum, line) => sum + line.amountCents, 0);
+  const grossTotalCents =
+    subtotalCents +
+    serviceChargeCents +
+    (store.priceIncludesTax ? 0 : taxCents);
+  const cappedDiscountCents = Math.min(
+    Math.max(Math.round(discountCents), 0),
+    grossTotalCents,
+  );
   return {
     subtotalCents,
     serviceChargeCents,
     taxCents,
     taxLines,
     includedTaxCents,
-    totalCents:
-      subtotalCents +
-      serviceChargeCents +
-      (store.priceIncludesTax ? 0 : taxCents),
+    discountCents: cappedDiscountCents,
+    discountLabel: cappedDiscountCents > 0 ? (discountLabel ?? null) : null,
+    totalCents: grossTotalCents - cappedDiscountCents,
     serviceChargeRateBps: store.serviceChargeRateBps,
     taxRateBps: store.taxRateBps,
     serviceChargeLabel: store.serviceChargeLabel,
@@ -850,7 +916,12 @@ function mapCustomerOrder(
 ): CustomerOrder {
   return {
     ...mapOrder(order),
-    totals: calculateTotals(order.items, store),
+    totals: calculateTotals(
+      order.items,
+      store,
+      order.couponDiscountCents,
+      order.couponDiscountLabel ?? order.couponCodeSnapshot,
+    ),
   };
 }
 
@@ -888,8 +959,195 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function normalizePhone(phone: string | null | undefined) {
+  const trimmed = phone?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeCouponCode(code: string | null | undefined) {
+  const trimmed = code?.trim().toUpperCase();
+  return trimmed ? trimmed : null;
+}
+
 function isManagerRole(role: string | null | undefined) {
   return role === "DEV" || role === "ADMIN";
+}
+
+async function findOrCreateMember(input: {
+  tx: Prisma.TransactionClient;
+  storeId: string;
+  phone?: string | null;
+  name?: string | null;
+}) {
+  const phone = normalizePhone(input.phone);
+  if (!phone) return null;
+  const name = input.name?.trim() || null;
+  return input.tx.member.upsert({
+    where: {
+      storeId_phone: {
+        storeId: input.storeId,
+        phone,
+      },
+    },
+    update: name ? { name } : {},
+    create: {
+      storeId: input.storeId,
+      name,
+      phone,
+      points: 0,
+    },
+  });
+}
+
+type CouponRuleRecord = {
+  id: string;
+  code: string;
+  discountType: string;
+  discountValue: number;
+  minimumSubtotalCents: number;
+  isActive: boolean;
+  startsAt: Date | null;
+  endsAt: Date | null;
+};
+
+function calculateCouponDiscount(input: {
+  coupon: CouponRuleRecord;
+  subtotalCents: number;
+  totalBeforeDiscountCents: number;
+}) {
+  const rawDiscount =
+    input.coupon.discountType === "AMOUNT"
+      ? input.coupon.discountValue
+      : Math.round(
+          (input.subtotalCents *
+            Math.min(Math.max(input.coupon.discountValue, 0), 100)) /
+            100,
+        );
+  return Math.min(
+    Math.max(rawDiscount, 0),
+    Math.max(input.totalBeforeDiscountCents, 0),
+  );
+}
+
+async function resolveCouponDiscount(input: {
+  tx: Prisma.TransactionClient;
+  storeId: string;
+  code?: string | null;
+  subtotalCents: number;
+  totalBeforeDiscountCents: number;
+  memberId?: string | null;
+  skipOpenOrderCheck?: boolean;
+}) {
+  const code = normalizeCouponCode(input.code);
+  if (!code) return null;
+
+  const coupon = await input.tx.coupon.findFirst({
+    where: { storeId: input.storeId, code },
+  });
+  if (!coupon) {
+    throw new HttpError(404, "COUPON_NOT_FOUND", "Coupon not found");
+  }
+
+  const now = new Date();
+  if (
+    !coupon.isActive ||
+    (coupon.startsAt && coupon.startsAt > now) ||
+    (coupon.endsAt && coupon.endsAt < now)
+  ) {
+    throw new HttpError(400, "COUPON_INACTIVE", "Coupon is not active");
+  }
+
+  if (input.subtotalCents < coupon.minimumSubtotalCents) {
+    throw new HttpError(
+      400,
+      "COUPON_MINIMUM_NOT_MET",
+      "Order subtotal does not meet the coupon minimum",
+    );
+  }
+
+  if (input.memberId) {
+    const existingRedemption = await input.tx.couponRedemption.findFirst({
+      where: {
+        storeId: input.storeId,
+        couponId: coupon.id,
+        memberId: input.memberId,
+      },
+      select: { id: true },
+    });
+    if (existingRedemption) {
+      throw new HttpError(
+        409,
+        "COUPON_ALREADY_REDEEMED",
+        "This member has already used this coupon",
+      );
+    }
+    if (!input.skipOpenOrderCheck) {
+      const existingOpenOrder = await input.tx.order.findFirst({
+        where: {
+          storeId: input.storeId,
+          memberId: input.memberId,
+          couponId: coupon.id,
+          status: "SUBMITTED",
+        },
+        select: { id: true },
+      });
+      if (existingOpenOrder) {
+        throw new HttpError(
+          409,
+          "COUPON_ALREADY_APPLIED",
+          "This member already has an open order using this coupon",
+        );
+      }
+    }
+  }
+
+  const discountCents = calculateCouponDiscount({
+    coupon,
+    subtotalCents: input.subtotalCents,
+    totalBeforeDiscountCents: input.totalBeforeDiscountCents,
+  });
+  if (discountCents <= 0) {
+    throw new HttpError(400, "COUPON_NO_VALUE", "Coupon has no value here");
+  }
+
+  return {
+    coupon,
+    discountCents,
+    label: coupon.code,
+  };
+}
+
+function memberPointsForPayment(amountCents: number, tipCents: number) {
+  return Math.max(0, Math.floor((amountCents - tipCents) / 100));
+}
+
+function tableCouponDiscount(
+  orders: Array<{
+    couponDiscountCents: number;
+    couponDiscountLabel: string | null;
+    couponCodeSnapshot: string | null;
+  }>,
+) {
+  const discountCents = orders.reduce(
+    (sum, order) => sum + order.couponDiscountCents,
+    0,
+  );
+  const labels = Array.from(
+    new Set(
+      orders
+        .map((order) => order.couponDiscountLabel ?? order.couponCodeSnapshot)
+        .filter((label): label is string => Boolean(label)),
+    ),
+  );
+  return {
+    discountCents,
+    label:
+      labels.length === 0
+        ? null
+        : labels.length === 1
+          ? labels[0]
+          : "Order coupons",
+  };
 }
 
 async function assertCanChangeManagerAccess(input: {
@@ -1150,16 +1408,21 @@ export async function getPublicOrders(qrToken: string) {
       take: 20,
     }),
   ]);
-  const openItems = orders
-    .filter((order) => order.status === "SUBMITTED")
-    .flatMap((order) => order.items);
+  const openOrders = orders.filter((order) => order.status === "SUBMITTED");
+  const openItems = openOrders.flatMap((order) => order.items);
+  const openCoupon = tableCouponDiscount(openOrders);
 
   return {
     store: mapStore(table.store),
     table: mapTable(table),
     orders: orders.map((order) => mapCustomerOrder(order, table.store)),
     serviceRequests: serviceRequests.map(mapServiceRequest),
-    openTotals: calculateTotals(openItems, table.store),
+    openTotals: calculateTotals(
+      openItems,
+      table.store,
+      openCoupon.discountCents,
+      openCoupon.label,
+    ),
   };
 }
 
@@ -1271,12 +1534,36 @@ export async function createOrder(input: CreateOrderRequest) {
         status: "PENDING" as const,
       };
     });
+    const customerName = input.customerName?.trim() || null;
+    const customerPhone = normalizePhone(input.customerPhone);
+    const member = await findOrCreateMember({
+      tx,
+      storeId: table.storeId,
+      phone: customerPhone,
+      name: customerName,
+    });
+    const preDiscountTotals = calculateTotals(orderItems, table.store);
+    const couponDiscount = await resolveCouponDiscount({
+      tx,
+      storeId: table.storeId,
+      code: input.couponCode,
+      subtotalCents: preDiscountTotals.subtotalCents,
+      totalBeforeDiscountCents: preDiscountTotals.totalCents,
+      memberId: member?.id,
+    });
 
     const order = await tx.order.create({
       data: {
         storeId: table.storeId,
         tableId: table.id,
         status: "SUBMITTED",
+        customerName,
+        customerPhone,
+        memberId: member?.id ?? null,
+        couponId: couponDiscount?.coupon.id ?? null,
+        couponCodeSnapshot: couponDiscount?.coupon.code ?? null,
+        couponDiscountCents: couponDiscount?.discountCents ?? 0,
+        couponDiscountLabel: couponDiscount?.label ?? null,
         items: { create: orderItems },
       },
       include: { items: { orderBy: { createdAt: "asc" } } },
@@ -1352,7 +1639,13 @@ export async function getFohTables() {
       .filter((item) => item.status === "DONE")
       .slice(0, 5);
     const allOrderItems = table.orders.flatMap((order) => order.items);
-    const totals = calculateTotals(allOrderItems, store);
+    const coupon = tableCouponDiscount(table.orders);
+    const totals = calculateTotals(
+      allOrderItems,
+      store,
+      coupon.discountCents,
+      coupon.label,
+    );
 
     return {
       table: mapTable(table),
@@ -1481,9 +1774,44 @@ export async function checkoutTable(
       );
     }
 
+    const orderItems = tableOrders.flatMap((order) => order.items);
+    const preDiscountTotals = calculateTotals(orderItems, table.store);
+    const requestedMember = await findOrCreateMember({
+      tx,
+      storeId: table.storeId,
+      phone: input.memberPhone,
+      name: input.memberName,
+    });
+    const orderMemberId =
+      tableOrders.find((order) => order.memberId)?.memberId ?? null;
+    const member =
+      requestedMember ??
+      (orderMemberId
+        ? await tx.member.findFirst({
+            where: { id: orderMemberId, storeId: table.storeId },
+          })
+        : null);
+    const requestedCoupon = normalizeCouponCode(input.couponCode);
+    const orderCoupon = tableCouponDiscount(tableOrders);
+    const checkoutCoupon = requestedCoupon
+      ? await resolveCouponDiscount({
+          tx,
+          storeId: table.storeId,
+          code: requestedCoupon,
+          subtotalCents: preDiscountTotals.subtotalCents,
+          totalBeforeDiscountCents: preDiscountTotals.totalCents,
+          memberId: member?.id,
+          skipOpenOrderCheck: true,
+        })
+      : null;
+    const couponDiscountCents =
+      checkoutCoupon?.discountCents ?? orderCoupon.discountCents;
+    const couponLabel = checkoutCoupon?.label ?? orderCoupon.label;
     const totals = calculateTotals(
-      tableOrders.flatMap((order) => order.items),
+      orderItems,
       table.store,
+      couponDiscountCents,
+      couponLabel,
     );
     const paymentMethod = input.paymentMethod ?? "CASH";
     if (!PAYMENT_METHOD_SET.has(paymentMethod)) {
@@ -1493,12 +1821,11 @@ export async function checkoutTable(
         "Unsupported payment method",
       );
     }
+    const tipCents = input.tipCents ?? 0;
+    const manualDiscountCents = input.discountCents ?? 0;
     const amountCents =
       input.amountCents ??
-      Math.max(
-        0,
-        totals.totalCents + (input.tipCents ?? 0) - (input.discountCents ?? 0),
-      );
+      Math.max(0, totals.totalCents + tipCents - manualDiscountCents);
     if (amountCents < 0) {
       throw new HttpError(
         400,
@@ -1509,9 +1836,20 @@ export async function checkoutTable(
 
     const closedAt = new Date();
     const closedOrderIds = tableOrders.map((order) => order.id);
+    const closeData: Prisma.OrderUncheckedUpdateManyInput = {
+      status: "CLOSED",
+      closedAt,
+    };
+    if (member) {
+      closeData.memberId = member.id;
+      closeData.customerPhone = member.phone;
+      if (input.memberName?.trim()) {
+        closeData.customerName = input.memberName.trim();
+      }
+    }
     await tx.order.updateMany({
       where: { id: { in: closedOrderIds } },
-      data: { status: "CLOSED", closedAt },
+      data: closeData,
     });
 
     const payment =
@@ -1527,19 +1865,92 @@ export async function checkoutTable(
               note:
                 input.note?.trim() ||
                 [
-                  input.tipCents ? `tip=${input.tipCents}` : null,
-                  input.discountCents
-                    ? `discount=${input.discountCents}`
+                  tipCents ? `tip=${tipCents}` : null,
+                  manualDiscountCents
+                    ? `manualDiscount=${manualDiscountCents}`
                     : null,
+                  couponDiscountCents
+                    ? `couponDiscount=${couponDiscountCents}`
+                    : null,
+                  member ? `member=${member.phone}` : null,
                 ]
                   .filter(Boolean)
                   .join("; ") ||
                 null,
               orderIds: closedOrderIds,
+              memberId: member?.id ?? null,
+              memberPhoneSnapshot: member?.phone ?? null,
+              memberNameSnapshot:
+                member?.name ?? input.memberName?.trim() ?? null,
+              couponId:
+                checkoutCoupon?.coupon.id ??
+                tableOrders.find((order) => order.couponId)?.couponId ??
+                null,
+              couponCodeSnapshot:
+                checkoutCoupon?.coupon.code ??
+                tableOrders.find((order) => order.couponCodeSnapshot)
+                  ?.couponCodeSnapshot ??
+                null,
+              manualDiscountCents,
+              couponDiscountCents,
+              tipCents,
+              pointsEarned: member
+                ? memberPointsForPayment(amountCents, tipCents)
+                : 0,
               paidAt: closedAt,
             },
           })
         : null;
+
+    if (payment && member && payment.pointsEarned > 0) {
+      await tx.member.update({
+        where: { id: member.id },
+        data: { points: { increment: payment.pointsEarned } },
+      });
+      await tx.memberPointLedger.create({
+        data: {
+          storeId: table.storeId,
+          memberId: member.id,
+          paymentId: payment.id,
+          pointsDelta: payment.pointsEarned,
+          reason: "PAYMENT_EARNED",
+        },
+      });
+    }
+
+    if (payment && couponDiscountCents > 0) {
+      if (checkoutCoupon) {
+        await tx.couponRedemption.create({
+          data: {
+            storeId: table.storeId,
+            couponId: checkoutCoupon.coupon.id,
+            memberId: member?.id ?? null,
+            orderId: closedOrderIds[0] ?? null,
+            paymentId: payment.id,
+            codeSnapshot: checkoutCoupon.coupon.code,
+            discountCents: checkoutCoupon.discountCents,
+            subtotalCents: preDiscountTotals.subtotalCents,
+          },
+        });
+      } else {
+        for (const order of tableOrders) {
+          if (!order.couponId || order.couponDiscountCents <= 0) continue;
+          const orderTotals = calculateTotals(order.items, table.store);
+          await tx.couponRedemption.create({
+            data: {
+              storeId: table.storeId,
+              couponId: order.couponId,
+              memberId: member?.id ?? order.memberId ?? null,
+              orderId: order.id,
+              paymentId: payment.id,
+              codeSnapshot: order.couponCodeSnapshot ?? couponLabel ?? "COUPON",
+              discountCents: order.couponDiscountCents,
+              subtotalCents: orderTotals.subtotalCents,
+            },
+          });
+        }
+      }
+    }
 
     return {
       tableId,
@@ -1924,7 +2335,9 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
     purchaseOrders,
     inventoryAdjustments,
     members,
+    memberPaymentStats,
     coupons,
+    couponRedemptionStats,
     kdsDevices,
     auditLogs,
   ] = await Promise.all([
@@ -1959,10 +2372,22 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
+    prisma.payment.groupBy({
+      by: ["memberId"],
+      where: { storeId: store.id, memberId: { not: null } },
+      _count: { _all: true },
+      _sum: { amountCents: true },
+      _max: { paidAt: true },
+    }),
     prisma.coupon.findMany({
       where: { storeId: store.id },
       orderBy: { code: "asc" },
       take: 100,
+    }),
+    prisma.couponRedemption.groupBy({
+      by: ["couponId"],
+      where: { storeId: store.id },
+      _count: { _all: true },
     }),
     prisma.kdsDevice.findMany({
       where: { storeId: store.id },
@@ -1975,14 +2400,36 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
       take: 50,
     }),
   ]);
+  const memberStats = new Map(
+    memberPaymentStats
+      .filter((row) => row.memberId)
+      .map((row) => [
+        row.memberId as string,
+        {
+          paymentCount: row._count._all,
+          totalSpendCents: row._sum.amountCents ?? 0,
+          lastPaidAt: row._max.paidAt ?? null,
+        },
+      ]),
+  );
+  const couponStats = new Map(
+    couponRedemptionStats.map((row) => [row.couponId, row._count._all]),
+  );
 
   return {
     store: mapStore(store),
     suppliers: suppliers.map(mapSupplier),
     purchaseOrders: purchaseOrders.map(mapPurchaseOrder),
     inventoryAdjustments: inventoryAdjustments.map(mapInventoryAdjustment),
-    members: members.map(mapMember),
-    coupons: coupons.map(mapCoupon),
+    members: members.map((member) =>
+      mapMember({ ...member, ...(memberStats.get(member.id) ?? {}) }),
+    ),
+    coupons: coupons.map((coupon) =>
+      mapCoupon({
+        ...coupon,
+        redemptionCount: couponStats.get(coupon.id) ?? 0,
+      }),
+    ),
     kdsDevices: kdsDevices.map(mapKdsDevice),
     auditLogs: auditLogs.map(mapAuditLog),
   };
@@ -2631,11 +3078,15 @@ export async function createInventoryAdjustment(
 
 export async function createMember(input: CreateMemberRequest) {
   const store = await getDefaultStore();
+  const phone = normalizePhone(input.phone);
+  if (!phone) {
+    throw new HttpError(400, "INVALID_MEMBER_PHONE", "Member phone required");
+  }
   const member = await prisma.member.upsert({
     where: {
       storeId_phone: {
         storeId: store.id,
-        phone: input.phone.trim(),
+        phone,
       },
     },
     update: {
@@ -2646,7 +3097,7 @@ export async function createMember(input: CreateMemberRequest) {
     create: {
       storeId: store.id,
       name: input.name?.trim() || null,
-      phone: input.phone.trim(),
+      phone,
       email: input.email?.trim() || null,
       points: input.points ?? 0,
     },
@@ -2670,7 +3121,9 @@ export async function updateMember(
     where: { id: existing.id },
     data: {
       ...(input.name !== undefined ? { name: input.name?.trim() || null } : {}),
-      ...(input.phone !== undefined ? { phone: input.phone.trim() } : {}),
+      ...(input.phone !== undefined
+        ? { phone: normalizePhone(input.phone) ?? existing.phone }
+        : {}),
       ...(input.email !== undefined
         ? { email: input.email?.trim() || null }
         : {}),
@@ -2692,6 +3145,7 @@ export async function createCoupon(input: CreateCouponRequest) {
     update: {
       discountType: input.discountType,
       discountValue: input.discountValue,
+      minimumSubtotalCents: input.minimumSubtotalCents ?? 0,
       isActive: input.isActive,
       startsAt: input.startsAt ? new Date(input.startsAt) : null,
       endsAt: input.endsAt ? new Date(input.endsAt) : null,
@@ -2701,6 +3155,7 @@ export async function createCoupon(input: CreateCouponRequest) {
       code: input.code.trim().toUpperCase(),
       discountType: input.discountType,
       discountValue: input.discountValue,
+      minimumSubtotalCents: input.minimumSubtotalCents ?? 0,
       isActive: input.isActive,
       startsAt: input.startsAt ? new Date(input.startsAt) : null,
       endsAt: input.endsAt ? new Date(input.endsAt) : null,
@@ -2732,6 +3187,9 @@ export async function updateCoupon(
         : {}),
       ...(input.discountValue !== undefined
         ? { discountValue: input.discountValue }
+        : {}),
+      ...(input.minimumSubtotalCents !== undefined
+        ? { minimumSubtotalCents: input.minimumSubtotalCents }
         : {}),
       ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
       ...(input.startsAt !== undefined

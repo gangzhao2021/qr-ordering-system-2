@@ -33,6 +33,9 @@ type CheckoutDraft = {
   amount: string;
   tip: string;
   discount: string;
+  memberPhone: string;
+  memberName: string;
+  couponCode: string;
   reference: string;
   note: string;
 };
@@ -168,6 +171,9 @@ export default function FohPage() {
         amount: dollarsFromCents(table.openTotalCents),
         tip: "0.00",
         discount: "0.00",
+        memberPhone: "",
+        memberName: "",
+        couponCode: "",
         reference: "",
         note: "",
       }
@@ -192,6 +198,9 @@ export default function FohPage() {
           amountCents: parsePriceCents(draft.amount),
           tipCents: parsePriceCents(draft.tip || "0"),
           discountCents: parsePriceCents(draft.discount || "0"),
+          memberPhone: draft.memberPhone.trim() || null,
+          memberName: draft.memberName.trim() || null,
+          couponCode: draft.couponCode.trim() || null,
           reference: draft.reference.trim() || null,
           note: draft.note.trim() || null,
         }),
@@ -493,6 +502,21 @@ export default function FohPage() {
                             </strong>
                           </div>
                         ) : null}
+                        {table.totals.discountCents > 0 ? (
+                          <div className="row between">
+                            <span>
+                              {table.totals.discountLabel ?? "Coupon discount"}
+                            </span>
+                            <strong>
+                              -
+                              {formatCents(
+                                table.totals.discountCents,
+                                data?.store.currency,
+                                data?.store.locale,
+                              )}
+                            </strong>
+                          </div>
+                        ) : null}
                       </div>
 
                       {table.recentlyDoneItems.length > 0 ? (
@@ -575,6 +599,43 @@ export default function FohPage() {
                               onChange={(event) =>
                                 updateCheckoutDraft(table, {
                                   discount: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Member phone</span>
+                            <input
+                              className="input"
+                              inputMode="tel"
+                              value={payment.memberPhone}
+                              onChange={(event) =>
+                                updateCheckoutDraft(table, {
+                                  memberPhone: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Member name</span>
+                            <input
+                              className="input"
+                              value={payment.memberName}
+                              onChange={(event) =>
+                                updateCheckoutDraft(table, {
+                                  memberName: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Coupon code</span>
+                            <input
+                              className="input"
+                              value={payment.couponCode}
+                              onChange={(event) =>
+                                updateCheckoutDraft(table, {
+                                  couponCode: event.target.value.toUpperCase(),
                                 })
                               }
                             />
@@ -729,6 +790,26 @@ export default function FohPage() {
                       </strong>
                     </div>
                     <div className="row">
+                      {payment.memberPhone ? (
+                        <span className="status">
+                          Member {payment.memberPhone}
+                        </span>
+                      ) : null}
+                      {payment.couponCode ? (
+                        <span className="status checkout">
+                          {payment.couponCode} -
+                          {formatCents(
+                            payment.couponDiscountCents,
+                            paymentData?.store.currency,
+                            paymentData?.store.locale,
+                          )}
+                        </span>
+                      ) : null}
+                      {payment.pointsEarned > 0 ? (
+                        <span className="status ok">
+                          +{payment.pointsEarned} pts
+                        </span>
+                      ) : null}
                       {payment.refundedCents > 0 ? (
                         <span className="status urgent">
                           refunded{" "}

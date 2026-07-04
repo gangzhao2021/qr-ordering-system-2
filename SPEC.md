@@ -26,6 +26,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Cancel order items when needed, restoring tracked stock.
 - Mark service requests handled.
 - Record payment, tip, discount, checkout, and local refunds when no pending dishes remain.
+- Attach member phone and coupon code at checkout when needed.
 - Keep all live order mutations on FOH surfaces.
 
 ### Kitchen
@@ -43,6 +44,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Provide QR entry links for customer preview.
 - Review print jobs and trigger reprints.
 - Manage suppliers, inventory adjustments, members, coupons, KDS device tokens, and audit history.
+- Review member payment summaries and coupon redemption counts.
 
 ### Printer Service
 
@@ -52,8 +54,8 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 ## Later Phases
 
 - Live Stripe/Interac/WeChat Pay/Alipay capture and reconciliation.
-- Customer-facing membership, coupon redemption, points, and feedback.
-- Purchase orders, recipes/BOM costing, stocktake, and supplier receiving.
+- Customer feedback and richer customer profile history.
+- Recipes/BOM costing, stocktake, and supplier invoice reconciliation.
 - Deeper analytics and reporting.
 - DEV multi-store onboarding and fleet operations.
 - KDS device heartbeat and category routing enforcement.
