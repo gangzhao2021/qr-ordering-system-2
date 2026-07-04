@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { SERVICE_REQUEST_TYPES } from "@qr2/shared";
 import {
+  createCustomerFeedback,
   createOrder,
   createServiceRequest,
   getPublicMenu,
@@ -77,6 +78,25 @@ publicRouter.post("/service-requests", async (req, res, next) => {
       })
       .parse(req.body);
     res.status(201).json(await createServiceRequest(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+publicRouter.post("/feedback", async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        qrToken: z.string().trim().min(1),
+        orderId: z.string().trim().min(1),
+        rating: z.number().int().min(1).max(5),
+        comment: z.string().trim().max(600).optional().nullable(),
+        tags: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
+        customerName: z.string().trim().max(120).optional().nullable(),
+        customerPhone: z.string().trim().max(80).optional().nullable(),
+      })
+      .parse(req.body);
+    res.status(201).json(await createCustomerFeedback(body));
   } catch (error) {
     next(error);
   }

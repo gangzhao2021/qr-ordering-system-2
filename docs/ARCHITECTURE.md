@@ -57,11 +57,13 @@ Customer order items snapshot the selected modifier names, modifier price deltas
 
 ## Store Operations
 
-Management operations are lightweight transactional records in the API database: suppliers, inventory adjustments, stocktakes, ingredients, recipes, members, coupons, KDS device tokens, and audit logs. Inventory adjustments update tracked `MenuItem.stockQuantity` and keep a recent adjustment history.
+Management operations are lightweight transactional records in the API database: suppliers, inventory adjustments, stocktakes, ingredients, recipes, members, coupons, customer feedback, KDS device tokens, and audit logs. Inventory adjustments update tracked `MenuItem.stockQuantity` and keep a recent adjustment history.
 
 P1 purchasing adds `PurchaseOrder` and `PurchaseOrderLine` records. Management can create an ordered purchase order against an active supplier, then receive each line partially or fully. Receiving increments `MenuItem.stockQuantity`, creates linked `InventoryAdjustment` rows, and moves the purchase order to `PARTIALLY_RECEIVED` or `RECEIVED`. Unit cost is stored for receiving context only; supplier invoice reconciliation remains later-phase work.
 
 P1 member/coupon checkout lets customer orders include an optional name, phone, and coupon code. The API upserts a member from phone, snapshots coupon discount on the order, and includes coupon discounts in public/FOH table totals and print ticket totals. FOH can also attach a member phone or coupon at checkout. Successful paid checkout increments member points, writes a `MemberPointLedger` row, and records `CouponRedemption` rows for operations reporting. Coupon rules intentionally stay simple: active window, minimum subtotal, fixed amount or percentage discount, and one redemption per member.
+
+P1 feedback lets customers submit one feedback record per closed order from the table-scoped public flow. Feedback stores rating, comment, tags, order/table/member links, and a simple `NEW` -> `REVIEWED` -> `RESOLVED` management status. It is not a live-order mutation, so FOH remains the only live order operator while management handles feedback triage. Operations also enriches each member record with recent order, payment, coupon, and feedback history for lightweight customer profile review.
 
 P1 stocktake adds applied stock counts for tracked menu items. Management can submit a stocktake with one or more counted lines; the API snapshots expected quantity, stores counted quantity and difference on `StocktakeLine`, updates `MenuItem.stockQuantity` to the counted value, and creates linked `InventoryAdjustment` rows for non-zero differences. This is intentionally an apply-now workflow; draft counts and ingredient stock deduction remain later work.
 

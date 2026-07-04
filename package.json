@@ -28,6 +28,7 @@
     "smoke:p1-members": "node scripts/smoke-p1-members.mjs",
     "smoke:p1-inventory": "node scripts/smoke-p1-inventory.mjs",
     "smoke:p1-recipes": "node scripts/smoke-p1-recipes.mjs",
+    "smoke:p1-feedback": "node scripts/smoke-p1-feedback.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

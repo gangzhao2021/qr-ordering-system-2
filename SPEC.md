@@ -17,6 +17,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Submit dine-in order for the current table.
 - View current table order status, item status, open total, tax lines, and service request status.
 - Send service requests: water, call staff, follow up.
+- Submit order feedback after checkout.
 - Preserve table context while navigating customer flows.
 
 ### FOH
@@ -47,6 +48,8 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Review member payment summaries and coupon redemption counts.
 - Apply stocktakes for tracked menu item inventory and review stocktake differences.
 - Manage ingredients, recipe lines, menu item cost, and margin estimates.
+- Review customer feedback and mark feedback reviewed or resolved.
+- Review member order, payment, coupon, and feedback history.
 
 ### Printer Service
 
@@ -56,7 +59,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 ## Later Phases
 
 - Live Stripe/Interac/WeChat Pay/Alipay capture and reconciliation.
-- Customer feedback and richer customer profile history.
+- Marketing automation and richer customer segmentation.
 - Supplier invoice reconciliation and advanced recipe costing.
 - Deeper analytics and reporting.
 - DEV multi-store onboarding and fleet operations.

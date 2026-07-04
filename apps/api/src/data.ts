@@ -5,6 +5,7 @@ import type {
   CheckoutTableRequest,
   CheckoutTableResponse,
   Coupon,
+  CreateFeedbackRequest,
   CreateCouponRequest,
   CreateDiningTableRequest,
   CreateIngredientRequest,
@@ -19,6 +20,7 @@ import type {
   CreateStaffUserRequest,
   CreateStocktakeRequest,
   CreateSupplierRequest,
+  CustomerFeedback,
   CustomerOrder,
   DiningTable,
   FohPendingItem,
@@ -64,6 +66,7 @@ import type {
   TaxRule,
   UpdateDiningTableRequest,
   UpdateCouponRequest,
+  UpdateFeedbackRequest,
   UpdateIngredientRequest,
   UpdateKdsDeviceRequest,
   UpdateMenuCategoryRequest,
@@ -194,6 +197,24 @@ type OrderRecord = {
   couponDiscountCents: number;
   couponDiscountLabel: string | null;
   items: OrderItemRecord[];
+  feedback?: FeedbackRecord[];
+};
+
+type FeedbackRecord = {
+  id: string;
+  tableId: string | null;
+  orderId: string | null;
+  memberId: string | null;
+  rating: number;
+  comment: string | null;
+  tags: unknown;
+  status: string;
+  customerName: string | null;
+  customerPhone: string | null;
+  createdAt: Date;
+  handledAt: Date | null;
+  table?: { number: string } | null;
+  member?: { phone: string; name: string | null } | null;
 };
 
 type ServiceRequestRecord = {
@@ -552,6 +573,32 @@ function mapOrder(order: OrderRecord): Order {
     couponDiscountCents: order.couponDiscountCents,
     couponDiscountLabel: order.couponDiscountLabel,
     items: order.items.map(mapOrderItem),
+    feedback: order.feedback?.[0] ? mapFeedback(order.feedback[0]) : null,
+  };
+}
+
+function feedbackStatus(value: string): CustomerFeedback["status"] {
+  if (value === "REVIEWED" || value === "RESOLVED") return value;
+  return "NEW";
+}
+
+function mapFeedback(feedback: FeedbackRecord): CustomerFeedback {
+  return {
+    id: feedback.id,
+    tableId: feedback.tableId,
+    tableNumber: feedback.table?.number ?? null,
+    orderId: feedback.orderId,
+    memberId: feedback.memberId,
+    memberPhone: feedback.member?.phone ?? feedback.customerPhone,
+    memberName: feedback.member?.name ?? feedback.customerName,
+    customerName: feedback.customerName,
+    customerPhone: feedback.customerPhone,
+    rating: feedback.rating,
+    comment: feedback.comment,
+    tags: stringArray(feedback.tags),
+    status: feedbackStatus(feedback.status),
+    createdAt: toIso(feedback.createdAt),
+    handledAt: optionalIso(feedback.handledAt),
   };
 }
 
@@ -841,9 +888,16 @@ function mapMember(member: {
   email: string | null;
   points: number;
   createdAt: Date;
+  orderCount?: number;
   paymentCount?: number;
   totalSpendCents?: number;
   lastPaidAt?: Date | string | null;
+  feedbackCount?: number;
+  lastFeedbackRating?: number | null;
+  recentOrders?: Member["recentOrders"];
+  recentPayments?: Member["recentPayments"];
+  recentCoupons?: Member["recentCoupons"];
+  recentFeedback?: Member["recentFeedback"];
 }): Member {
   return {
     id: member.id,
@@ -851,12 +905,19 @@ function mapMember(member: {
     phone: member.phone,
     email: member.email,
     points: member.points,
+    orderCount: member.orderCount,
     paymentCount: member.paymentCount,
     totalSpendCents: member.totalSpendCents,
     lastPaidAt:
       member.lastPaidAt instanceof Date
         ? toIso(member.lastPaidAt)
         : (member.lastPaidAt ?? null),
+    feedbackCount: member.feedbackCount,
+    lastFeedbackRating: member.lastFeedbackRating,
+    recentOrders: member.recentOrders,
+    recentPayments: member.recentPayments,
+    recentCoupons: member.recentCoupons,
+    recentFeedback: member.recentFeedback,
     createdAt: toIso(member.createdAt),
   };
 }
@@ -1534,7 +1595,16 @@ export async function getPublicOrders(qrToken: string) {
       where: { tableId: table.id },
       orderBy: { submittedAt: "desc" },
       take: 20,
-      include: { items: { orderBy: { createdAt: "asc" } } },
+      include: {
+        items: { orderBy: { createdAt: "asc" } },
+        feedback: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: {
+            member: { select: { phone: true, name: true } },
+          },
+        },
+      },
     }),
     prisma.serviceRequest.findMany({
       where: { tableId: table.id },
@@ -1741,6 +1811,132 @@ export async function createServiceRequest(input: CreateServiceRequestRequest) {
     },
   });
   return mapServiceRequest(request);
+}
+
+export async function createCustomerFeedback(input: CreateFeedbackRequest) {
+  if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) {
+    throw new HttpError(
+      400,
+      "INVALID_FEEDBACK_RATING",
+      "Feedback rating must be between 1 and 5",
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const table = await tx.diningTable.findUnique({
+      where: { qrToken: input.qrToken },
+      include: { store: true },
+    });
+    if (!table || !table.isActive) {
+      throw new HttpError(404, "TABLE_NOT_FOUND", "Table not found");
+    }
+
+    const order = await tx.order.findFirst({
+      where: {
+        id: input.orderId,
+        storeId: table.storeId,
+        tableId: table.id,
+      },
+      select: {
+        id: true,
+        storeId: true,
+        tableId: true,
+        status: true,
+        customerName: true,
+        customerPhone: true,
+        memberId: true,
+      },
+    });
+    if (!order) {
+      throw new HttpError(404, "ORDER_NOT_FOUND", "Order not found");
+    }
+    if (order.status !== "CLOSED") {
+      throw new HttpError(
+        409,
+        "ORDER_NOT_CLOSED",
+        "Feedback can be submitted after checkout",
+      );
+    }
+
+    const customerName = input.customerName?.trim() || order.customerName;
+    const customerPhone =
+      normalizePhone(input.customerPhone) ?? order.customerPhone;
+    const member =
+      order.memberId || !customerPhone
+        ? order.memberId
+          ? await tx.member.findFirst({
+              where: { id: order.memberId, storeId: table.storeId },
+            })
+          : null
+        : await findOrCreateMember({
+            tx,
+            storeId: table.storeId,
+            phone: customerPhone,
+            name: customerName,
+          });
+
+    if (member && !order.memberId) {
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          memberId: member.id,
+          customerName,
+          customerPhone: member.phone,
+        },
+      });
+    }
+
+    const tags = (input.tags ?? [])
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    const feedback = await tx.feedback.upsert({
+      where: { orderId: order.id },
+      update: {
+        rating: input.rating,
+        comment: input.comment?.trim() || null,
+        tags,
+        status: "NEW",
+        handledAt: null,
+        customerName,
+        customerPhone: member?.phone ?? customerPhone,
+        memberId: member?.id ?? order.memberId,
+      },
+      create: {
+        storeId: table.storeId,
+        tableId: table.id,
+        orderId: order.id,
+        memberId: member?.id ?? order.memberId,
+        rating: input.rating,
+        comment: input.comment?.trim() || null,
+        tags,
+        status: "NEW",
+        customerName,
+        customerPhone: member?.phone ?? customerPhone,
+      },
+      include: {
+        table: { select: { number: true } },
+        member: { select: { phone: true, name: true } },
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId: table.storeId,
+        action: "CUSTOMER_FEEDBACK_SUBMITTED",
+        entityType: "Feedback",
+        entityId: feedback.id,
+        metadata: {
+          orderId: order.id,
+          tableId: table.id,
+          rating: feedback.rating,
+          tags,
+        },
+      },
+    });
+
+    return mapFeedback(feedback);
+  });
 }
 
 export async function getFohTables() {
@@ -2473,8 +2669,11 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
     recipes,
     members,
     memberPaymentStats,
+    memberOrderStats,
+    memberFeedbackStats,
     coupons,
     couponRedemptionStats,
+    feedback,
     kdsDevices,
     auditLogs,
   ] = await Promise.all([
@@ -2549,6 +2748,17 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
       _sum: { amountCents: true },
       _max: { paidAt: true },
     }),
+    prisma.order.groupBy({
+      by: ["memberId"],
+      where: { storeId: store.id, memberId: { not: null } },
+      _count: { _all: true },
+    }),
+    prisma.feedback.groupBy({
+      by: ["memberId"],
+      where: { storeId: store.id, memberId: { not: null } },
+      _count: { _all: true },
+      _max: { createdAt: true },
+    }),
     prisma.coupon.findMany({
       where: { storeId: store.id },
       orderBy: { code: "asc" },
@@ -2558,6 +2768,15 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
       by: ["couponId"],
       where: { storeId: store.id },
       _count: { _all: true },
+    }),
+    prisma.feedback.findMany({
+      where: { storeId: store.id },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      take: 100,
+      include: {
+        table: { select: { number: true } },
+        member: { select: { phone: true, name: true } },
+      },
     }),
     prisma.kdsDevice.findMany({
       where: { storeId: store.id },
@@ -2585,6 +2804,123 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
   const couponStats = new Map(
     couponRedemptionStats.map((row) => [row.couponId, row._count._all]),
   );
+  const orderStats = new Map(
+    memberOrderStats
+      .filter((row) => row.memberId)
+      .map((row) => [row.memberId as string, row._count._all]),
+  );
+  const feedbackStats = new Map(
+    memberFeedbackStats
+      .filter((row) => row.memberId)
+      .map((row) => [row.memberId as string, row._count._all]),
+  );
+  const memberIds = members.map((member) => member.id);
+  const [memberOrders, memberPayments, memberCoupons, memberFeedback] =
+    memberIds.length > 0
+      ? await Promise.all([
+          prisma.order.findMany({
+            where: { storeId: store.id, memberId: { in: memberIds } },
+            orderBy: { submittedAt: "desc" },
+            take: 300,
+            include: {
+              table: { select: { number: true } },
+              items: { orderBy: { createdAt: "asc" } },
+            },
+          }),
+          prisma.payment.findMany({
+            where: { storeId: store.id, memberId: { in: memberIds } },
+            orderBy: { paidAt: "desc" },
+            take: 300,
+            include: { table: { select: { number: true } } },
+          }),
+          prisma.couponRedemption.findMany({
+            where: { storeId: store.id, memberId: { in: memberIds } },
+            orderBy: { redeemedAt: "desc" },
+            take: 300,
+          }),
+          prisma.feedback.findMany({
+            where: { storeId: store.id, memberId: { in: memberIds } },
+            orderBy: { createdAt: "desc" },
+            take: 300,
+            include: {
+              table: { select: { number: true } },
+              member: { select: { phone: true, name: true } },
+            },
+          }),
+        ])
+      : [[], [], [], []];
+
+  const recentOrdersByMember = new Map<string, Member["recentOrders"]>();
+  for (const order of memberOrders) {
+    if (!order.memberId) continue;
+    const rows = recentOrdersByMember.get(order.memberId) ?? [];
+    if (rows.length >= 5) continue;
+    rows.push({
+      id: order.id,
+      tableNumber: order.table.number,
+      status: order.status,
+      totalCents: calculateTotals(
+        order.items,
+        store,
+        order.couponDiscountCents,
+        order.couponDiscountLabel ?? order.couponCodeSnapshot,
+      ).totalCents,
+      submittedAt: toIso(order.submittedAt),
+      closedAt: optionalIso(order.closedAt),
+    });
+    recentOrdersByMember.set(order.memberId, rows);
+  }
+
+  const recentPaymentsByMember = new Map<string, Member["recentPayments"]>();
+  for (const payment of memberPayments) {
+    if (!payment.memberId) continue;
+    const rows = recentPaymentsByMember.get(payment.memberId) ?? [];
+    if (rows.length >= 5) continue;
+    rows.push({
+      id: payment.id,
+      tableNumber: payment.table.number,
+      method: payment.method,
+      amountCents: payment.amountCents,
+      couponDiscountCents: payment.couponDiscountCents,
+      tipCents: payment.tipCents,
+      pointsEarned: payment.pointsEarned,
+      paidAt: toIso(payment.paidAt),
+      orderIds: Array.isArray(payment.orderIds)
+        ? payment.orderIds.filter((id): id is string => typeof id === "string")
+        : [],
+    });
+    recentPaymentsByMember.set(payment.memberId, rows);
+  }
+
+  const recentCouponsByMember = new Map<string, Member["recentCoupons"]>();
+  for (const redemption of memberCoupons) {
+    if (!redemption.memberId) continue;
+    const rows = recentCouponsByMember.get(redemption.memberId) ?? [];
+    if (rows.length >= 5) continue;
+    rows.push({
+      id: redemption.id,
+      code: redemption.codeSnapshot,
+      discountCents: redemption.discountCents,
+      subtotalCents: redemption.subtotalCents,
+      orderId: redemption.orderId,
+      paymentId: redemption.paymentId,
+      redeemedAt: toIso(redemption.redeemedAt),
+    });
+    recentCouponsByMember.set(redemption.memberId, rows);
+  }
+
+  const recentFeedbackByMember = new Map<string, Member["recentFeedback"]>();
+  const lastFeedbackRatingByMember = new Map<string, number>();
+  for (const entry of memberFeedback) {
+    if (!entry.memberId) continue;
+    if (!lastFeedbackRatingByMember.has(entry.memberId)) {
+      lastFeedbackRatingByMember.set(entry.memberId, entry.rating);
+    }
+    const rows = recentFeedbackByMember.get(entry.memberId) ?? [];
+    if (rows.length >= 5) continue;
+    rows.push(mapFeedback(entry));
+    recentFeedbackByMember.set(entry.memberId, rows);
+  }
 
   return {
     store: mapStore(store),
@@ -2595,8 +2931,19 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
     ingredients: ingredients.map(mapIngredient),
     recipes: recipes.map(mapRecipe),
     members: members.map((member) =>
-      mapMember({ ...member, ...(memberStats.get(member.id) ?? {}) }),
+      mapMember({
+        ...member,
+        ...(memberStats.get(member.id) ?? {}),
+        orderCount: orderStats.get(member.id) ?? 0,
+        feedbackCount: feedbackStats.get(member.id) ?? 0,
+        lastFeedbackRating: lastFeedbackRatingByMember.get(member.id) ?? null,
+        recentOrders: recentOrdersByMember.get(member.id) ?? [],
+        recentPayments: recentPaymentsByMember.get(member.id) ?? [],
+        recentCoupons: recentCouponsByMember.get(member.id) ?? [],
+        recentFeedback: recentFeedbackByMember.get(member.id) ?? [],
+      }),
     ),
+    feedback: feedback.map(mapFeedback),
     coupons: coupons.map((coupon) =>
       mapCoupon({
         ...coupon,
@@ -3580,6 +3927,47 @@ export async function upsertRecipe(input: UpsertRecipeRequest) {
       },
     });
     return mapRecipe(saved);
+  });
+}
+
+export async function updateCustomerFeedbackStatus(
+  feedbackId: string,
+  input: UpdateFeedbackRequest,
+) {
+  const store = await getDefaultStore();
+  const existing = await prisma.feedback.findFirst({
+    where: { id: feedbackId, storeId: store.id },
+  });
+  if (!existing) {
+    throw new HttpError(404, "FEEDBACK_NOT_FOUND", "Feedback not found");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const feedback = await tx.feedback.update({
+      where: { id: existing.id },
+      data: {
+        status: input.status,
+        handledAt: input.status === "NEW" ? null : new Date(),
+      },
+      include: {
+        table: { select: { number: true } },
+        member: { select: { phone: true, name: true } },
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        storeId: store.id,
+        action: "CUSTOMER_FEEDBACK_UPDATED",
+        entityType: "Feedback",
+        entityId: feedback.id,
+        metadata: {
+          status: feedback.status,
+          orderId: feedback.orderId,
+          rating: feedback.rating,
+        },
+      },
+    });
+    return mapFeedback(feedback);
   });
 }
 

@@ -86,6 +86,9 @@ export const PURCHASE_ORDER_STATUSES = [
 ] as const;
 export type PurchaseOrderStatus = (typeof PURCHASE_ORDER_STATUSES)[number];
 
+export const FEEDBACK_STATUSES = ["NEW", "REVIEWED", "RESOLVED"] as const;
+export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
+
 export type LocalizedText = {
   en?: string | null;
   "fr-CA"?: string | null;
@@ -333,6 +336,7 @@ export type Order = {
   couponDiscountCents: number;
   couponDiscountLabel?: string | null;
   items: OrderItem[];
+  feedback?: CustomerFeedback | null;
 };
 
 export type CustomerOrder = Order & {
@@ -484,6 +488,38 @@ export type CreateServiceRequestRequest = {
   qrToken: string;
   type: ServiceRequestType;
   note?: string;
+};
+
+export type CustomerFeedback = {
+  id: string;
+  tableId?: string | null;
+  tableNumber?: string | null;
+  orderId?: string | null;
+  memberId?: string | null;
+  memberPhone?: string | null;
+  memberName?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  rating: number;
+  comment?: string | null;
+  tags: string[];
+  status: FeedbackStatus;
+  createdAt: string;
+  handledAt?: string | null;
+};
+
+export type CreateFeedbackRequest = {
+  qrToken: string;
+  orderId: string;
+  rating: number;
+  comment?: string | null;
+  tags?: string[];
+  customerName?: string | null;
+  customerPhone?: string | null;
+};
+
+export type UpdateFeedbackRequest = {
+  status: FeedbackStatus;
 };
 
 export type FohPendingItem = OrderItem & {
@@ -658,9 +694,41 @@ export type Member = {
   phone: string;
   email?: string | null;
   points: number;
+  orderCount?: number;
   paymentCount?: number;
   totalSpendCents?: number;
   lastPaidAt?: string | null;
+  feedbackCount?: number;
+  lastFeedbackRating?: number | null;
+  recentOrders?: Array<{
+    id: string;
+    tableNumber?: string | null;
+    status: OrderStatus;
+    totalCents: number;
+    submittedAt: string;
+    closedAt?: string | null;
+  }>;
+  recentPayments?: Array<{
+    id: string;
+    tableNumber?: string | null;
+    method: PaymentMethod;
+    amountCents: number;
+    couponDiscountCents: number;
+    tipCents: number;
+    pointsEarned: number;
+    paidAt: string;
+    orderIds: string[];
+  }>;
+  recentCoupons?: Array<{
+    id: string;
+    code: string;
+    discountCents: number;
+    subtotalCents: number;
+    orderId?: string | null;
+    paymentId?: string | null;
+    redeemedAt: string;
+  }>;
+  recentFeedback?: CustomerFeedback[];
   createdAt: string;
 };
 
@@ -728,6 +796,7 @@ export type ManageOperationsResponse = {
   ingredients: Ingredient[];
   recipes: MenuRecipe[];
   members: Member[];
+  feedback: CustomerFeedback[];
   coupons: Coupon[];
   kdsDevices: KdsDevice[];
   auditLogs: AuditLog[];

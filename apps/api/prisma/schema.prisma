@@ -284,6 +284,7 @@ model Order {
   items OrderItem[]
   printJobs PrintJob[]
   couponRedemptions CouponRedemption[]
+  feedback Feedback[]
 
   @@index([storeId])
   @@index([tableId])
@@ -533,6 +534,7 @@ model Member {
   payments Payment[]
   couponRedemptions CouponRedemption[]
   pointLedgerEntries MemberPointLedger[]
+  feedback Feedback[]
 
   @@index([storeId])
   @@unique([storeId, phone])
@@ -637,16 +639,29 @@ model AuditLog {
 }
 
 model Feedback {
-  id        String   @id @default(cuid())
-  storeId   String
-  tableId   String?
-  rating    Int
-  comment   String?
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  storeId       String
+  tableId       String?
+  orderId       String?  @unique
+  memberId      String?
+  rating        Int
+  comment       String?
+  tags          Json     @default("[]")
+  status        String   @default("NEW")
+  customerName  String?
+  customerPhone String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  handledAt     DateTime?
 
   store Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
   table DiningTable? @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  order Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  member Member?     @relation(fields: [memberId], references: [id], onDelete: SetNull)
 
   @@index([storeId])
   @@index([tableId])
+  @@index([memberId])
+  @@index([status])
+  @@index([createdAt])
 }

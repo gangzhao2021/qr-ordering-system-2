@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type {
   Coupon,
+  CustomerFeedback,
+  FeedbackStatus,
   Ingredient,
   KdsDevice,
   ManageMenuResponse,
@@ -196,6 +198,24 @@ function stockLabel(value?: number | null) {
 
 function formatBps(value: number) {
   return `${(value / 100).toFixed(1)}%`;
+}
+
+function stars(value: number) {
+  return `${value}/5`;
+}
+
+function feedbackStatusClass(status: FeedbackStatus) {
+  if (status === "RESOLVED") return "status ok";
+  if (status === "REVIEWED") return "status checkout";
+  return "status urgent";
+}
+
+function feedbackTagLabel(tag: string) {
+  return tag
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function supplierForm(entry: Supplier): SupplierForm {
@@ -755,6 +775,23 @@ export default function ManageOperationsPage() {
     }));
   }
 
+  async function updateFeedbackStatus(
+    entry: CustomerFeedback,
+    status: FeedbackStatus,
+  ) {
+    setError(null);
+    try {
+      await apiFetch(`/v1/manage/operations/feedback/${entry.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      setNotice("Feedback updated.");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function saveSupplier(entry: Supplier) {
     const draft = supplierDrafts[entry.id] ?? supplierForm(entry);
     setError(null);
@@ -870,7 +907,8 @@ export default function ManageOperationsPage() {
           <h1>Operations</h1>
           <p>
             Manage purchasing contacts, item stock movement, ingredient costs,
-            recipes, loyalty members, coupons, KDS devices, and audit history.
+            recipes, guest feedback, loyalty members, coupons, KDS devices, and
+            audit history.
           </p>
         </section>
         {error ? <div className="error card">{error}</div> : null}
@@ -2071,6 +2109,79 @@ export default function ManageOperationsPage() {
           </article>
 
           <article className="card grid">
+            <h2>Feedback</h2>
+            <div className="operations-edit-list">
+              {(operations?.feedback ?? []).map((entry) => (
+                <div className="operations-record-card" key={entry.id}>
+                  <div className="row between">
+                    <div>
+                      <strong>{stars(entry.rating)}</strong>
+                      <p>
+                        Table {entry.tableNumber ?? "-"}
+                        {entry.orderId
+                          ? ` / order ${entry.orderId.slice(0, 8)}`
+                          : ""}
+                      </p>
+                    </div>
+                    <span className={feedbackStatusClass(entry.status)}>
+                      {entry.status}
+                    </span>
+                  </div>
+                  <div className="row between">
+                    <span className="meta">
+                      {entry.memberPhone ??
+                        entry.customerPhone ??
+                        "No member phone"}
+                    </span>
+                    <span className="meta">
+                      {formatDateTime(entry.createdAt)}
+                    </span>
+                  </div>
+                  {entry.tags.length > 0 ? (
+                    <span className="meta">
+                      {entry.tags.map(feedbackTagLabel).join(" / ")}
+                    </span>
+                  ) : null}
+                  {entry.comment ? <p>{entry.comment}</p> : null}
+                  <div className="row">
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      disabled={entry.status === "NEW"}
+                      onClick={() => void updateFeedbackStatus(entry, "NEW")}
+                    >
+                      Reopen
+                    </button>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      disabled={entry.status === "REVIEWED"}
+                      onClick={() =>
+                        void updateFeedbackStatus(entry, "REVIEWED")
+                      }
+                    >
+                      Review
+                    </button>
+                    <button
+                      className="btn primary"
+                      type="button"
+                      disabled={entry.status === "RESOLVED"}
+                      onClick={() =>
+                        void updateFeedbackStatus(entry, "RESOLVED")
+                      }
+                    >
+                      Resolve
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {operations?.feedback.length === 0 ? (
+                <span className="meta">No feedback yet.</span>
+              ) : null}
+            </div>
+          </article>
+
+          <article className="card grid">
             <h2>Members</h2>
             <div className="operations-edit-list">
               {(operations?.members ?? []).map((entry) => {
@@ -2098,6 +2209,19 @@ export default function ManageOperationsPage() {
                       <span className="meta">
                         Last {formatDateTime(entry.lastPaidAt)}
                       </span>
+                    </div>
+                    <div className="row">
+                      <span className="status">
+                        {entry.orderCount ?? 0} orders
+                      </span>
+                      <span className="status">
+                        {entry.feedbackCount ?? 0} feedback
+                      </span>
+                      {entry.lastFeedbackRating ? (
+                        <span className="status ok">
+                          Last {stars(entry.lastFeedbackRating)}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="operations-record-grid">
                       <label className="field">
@@ -2149,6 +2273,100 @@ export default function ManageOperationsPage() {
                           }
                         />
                       </label>
+                    </div>
+                    <div className="grid two">
+                      <div className="list compact-list">
+                        <strong>Recent orders</strong>
+                        {(entry.recentOrders ?? []).slice(0, 3).map((order) => (
+                          <div className="row between" key={order.id}>
+                            <span>
+                              {order.id.slice(0, 8)} / table{" "}
+                              {order.tableNumber ?? "-"}
+                            </span>
+                            <span className="meta">
+                              {formatCents(
+                                order.totalCents,
+                                operations?.store.currency,
+                                operations?.store.locale,
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                        {(entry.recentOrders ?? []).length === 0 ? (
+                          <span className="meta">No orders.</span>
+                        ) : null}
+                      </div>
+                      <div className="list compact-list">
+                        <strong>Recent payments</strong>
+                        {(entry.recentPayments ?? [])
+                          .slice(0, 3)
+                          .map((payment) => (
+                            <div className="row between" key={payment.id}>
+                              <span>{payment.method}</span>
+                              <span className="meta">
+                                {formatCents(
+                                  payment.amountCents,
+                                  operations?.store.currency,
+                                  operations?.store.locale,
+                                )}{" "}
+                                / {payment.pointsEarned} pts
+                              </span>
+                            </div>
+                          ))}
+                        {(entry.recentPayments ?? []).length === 0 ? (
+                          <span className="meta">No payments.</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="grid two">
+                      <div className="list compact-list">
+                        <strong>Recent coupons</strong>
+                        {(entry.recentCoupons ?? [])
+                          .slice(0, 3)
+                          .map((couponEntry) => (
+                            <div className="row between" key={couponEntry.id}>
+                              <span>{couponEntry.code}</span>
+                              <span className="meta">
+                                -
+                                {formatCents(
+                                  couponEntry.discountCents,
+                                  operations?.store.currency,
+                                  operations?.store.locale,
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        {(entry.recentCoupons ?? []).length === 0 ? (
+                          <span className="meta">No coupon redemptions.</span>
+                        ) : null}
+                      </div>
+                      <div className="list compact-list">
+                        <strong>Recent feedback</strong>
+                        {(entry.recentFeedback ?? [])
+                          .slice(0, 3)
+                          .map((feedbackEntry) => (
+                            <div className="row between" key={feedbackEntry.id}>
+                              <span>
+                                {stars(feedbackEntry.rating)}
+                                {feedbackEntry.tags.length > 0
+                                  ? ` / ${feedbackEntry.tags
+                                      .map(feedbackTagLabel)
+                                      .join(", ")}`
+                                  : ""}
+                              </span>
+                              <span
+                                className={feedbackStatusClass(
+                                  feedbackEntry.status,
+                                )}
+                              >
+                                {feedbackEntry.status}
+                              </span>
+                            </div>
+                          ))}
+                        {(entry.recentFeedback ?? []).length === 0 ? (
+                          <span className="meta">No feedback.</span>
+                        ) : null}
+                      </div>
                     </div>
                     <button
                       className="btn primary"

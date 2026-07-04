@@ -25,6 +25,26 @@ type CartLine = {
   maxQuantity: number;
 };
 
+type FeedbackDraft = {
+  rating: string;
+  comment: string;
+  tags: string[];
+};
+
+const feedbackTags = [
+  "FOOD_QUALITY",
+  "SERVICE",
+  "SPEED",
+  "CLEANLINESS",
+  "VALUE",
+] as const;
+
+const initialFeedbackDraft: FeedbackDraft = {
+  rating: "5",
+  comment: "",
+  tags: [],
+};
+
 const labels = {
   en: {
     entryTitle: "Customer entry",
@@ -106,6 +126,14 @@ const labels = {
     soldOut: "Sold out",
     unavailable: "Unavailable",
     available: "Available",
+    feedbackTitle: "How was this order?",
+    feedbackRating: "Rating",
+    feedbackComment: "Comment",
+    feedbackTags: "Tags",
+    feedbackSend: "Send feedback",
+    feedbackSent: "Feedback sent",
+    feedbackReceived: "Feedback received",
+    feedbackStatus: "Feedback status",
   },
   "fr-CA": {
     entryTitle: "Entree client",
@@ -186,6 +214,14 @@ const labels = {
     soldOut: "Epuise",
     unavailable: "Indisponible",
     available: "Disponible",
+    feedbackTitle: "Comment etait cette commande?",
+    feedbackRating: "Note",
+    feedbackComment: "Commentaire",
+    feedbackTags: "Etiquettes",
+    feedbackSend: "Envoyer l'avis",
+    feedbackSent: "Avis envoye",
+    feedbackReceived: "Avis recu",
+    feedbackStatus: "Statut de l'avis",
   },
   "zh-CN": {
     entryTitle: "顾客入口",
@@ -265,6 +301,14 @@ const labels = {
     soldOut: "售罄",
     unavailable: "不可售",
     available: "可点",
+    feedbackTitle: "这单体验如何？",
+    feedbackRating: "评分",
+    feedbackComment: "评价",
+    feedbackTags: "标签",
+    feedbackSend: "提交反馈",
+    feedbackSent: "反馈已提交",
+    feedbackReceived: "已收到反馈",
+    feedbackStatus: "反馈状态",
   },
 } as const;
 
@@ -352,6 +396,14 @@ function requestStatusLabel(
   return t.canceledStatus;
 }
 
+function feedbackTagLabel(tag: string) {
+  return tag
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function CustomerExperience() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -372,6 +424,9 @@ function CustomerExperience() {
     Record<string, boolean>
   >({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [feedbackDrafts, setFeedbackDrafts] = useState<
+    Record<string, FeedbackDraft>
+  >({});
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -630,6 +685,50 @@ function CustomerExperience() {
       });
       await refreshOrders();
       setNotice(t.requestSent);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function updateFeedbackDraft(orderId: string, patch: Partial<FeedbackDraft>) {
+    setFeedbackDrafts((current) => ({
+      ...current,
+      [orderId]: { ...(current[orderId] ?? initialFeedbackDraft), ...patch },
+    }));
+  }
+
+  function toggleFeedbackTag(orderId: string, tag: string, checked: boolean) {
+    const draft = feedbackDrafts[orderId] ?? initialFeedbackDraft;
+    updateFeedbackDraft(orderId, {
+      tags: checked
+        ? Array.from(new Set([...draft.tags, tag]))
+        : draft.tags.filter((entry) => entry !== tag),
+    });
+  }
+
+  async function submitFeedback(order: CustomerOrder) {
+    if (!qrToken || order.status !== "CLOSED") return;
+    const draft = feedbackDrafts[order.id] ?? initialFeedbackDraft;
+    setError(null);
+    try {
+      await apiFetch("/v1/public/feedback", {
+        method: "POST",
+        body: JSON.stringify({
+          qrToken,
+          orderId: order.id,
+          rating: Number(draft.rating || 5),
+          comment: draft.comment.trim() || null,
+          tags: draft.tags,
+          customerName: customerName.trim() || order.customerName || null,
+          customerPhone: customerPhone.trim() || order.customerPhone || null,
+        }),
+      });
+      await refreshOrders();
+      setFeedbackDrafts((current) => ({
+        ...current,
+        [order.id]: initialFeedbackDraft,
+      }));
+      setNotice(t.feedbackSent);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1298,6 +1397,112 @@ function CustomerExperience() {
                         )}
                       </strong>
                     </div>
+                    {order.status === "CLOSED" ? (
+                      order.feedback ? (
+                        <div className="list compact-list">
+                          <div className="row between">
+                            <strong>{t.feedbackReceived}</strong>
+                            <span className="status ok">
+                              {order.feedback.rating}/5
+                            </span>
+                          </div>
+                          <div className="row between">
+                            <span className="meta">{t.feedbackStatus}</span>
+                            <span className="meta">
+                              {order.feedback.status}
+                            </span>
+                          </div>
+                          {order.feedback.tags.length > 0 ? (
+                            <span className="meta">
+                              {order.feedback.tags
+                                .map(feedbackTagLabel)
+                                .join(" / ")}
+                            </span>
+                          ) : null}
+                          {order.feedback.comment ? (
+                            <p>{order.feedback.comment}</p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="grid compact-list">
+                          <strong>{t.feedbackTitle}</strong>
+                          <div className="grid two">
+                            <label className="field">
+                              <span>{t.feedbackRating}</span>
+                              <select
+                                className="select"
+                                value={
+                                  (
+                                    feedbackDrafts[order.id] ??
+                                    initialFeedbackDraft
+                                  ).rating
+                                }
+                                onChange={(event) =>
+                                  updateFeedbackDraft(order.id, {
+                                    rating: event.target.value,
+                                  })
+                                }
+                              >
+                                {[5, 4, 3, 2, 1].map((rating) => (
+                                  <option value={rating} key={rating}>
+                                    {rating}/5
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="field">
+                              <span>{t.feedbackComment}</span>
+                              <input
+                                className="input"
+                                maxLength={600}
+                                value={
+                                  (
+                                    feedbackDrafts[order.id] ??
+                                    initialFeedbackDraft
+                                  ).comment
+                                }
+                                onChange={(event) =>
+                                  updateFeedbackDraft(order.id, {
+                                    comment: event.target.value,
+                                  })
+                                }
+                              />
+                            </label>
+                          </div>
+                          <fieldset className="modifier-group">
+                            <legend>{t.feedbackTags}</legend>
+                            <div className="modifier-options">
+                              {feedbackTags.map((tag) => (
+                                <label className="mini-check" key={tag}>
+                                  <input
+                                    type="checkbox"
+                                    checked={(
+                                      feedbackDrafts[order.id] ??
+                                      initialFeedbackDraft
+                                    ).tags.includes(tag)}
+                                    onChange={(event) =>
+                                      toggleFeedbackTag(
+                                        order.id,
+                                        tag,
+                                        event.target.checked,
+                                      )
+                                    }
+                                  />
+                                  <span>{feedbackTagLabel(tag)}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </fieldset>
+                          <button
+                            className="btn ghost"
+                            onClick={() => void submitFeedback(order)}
+                            disabled={loading}
+                          >
+                            {t.feedbackSend}
+                          </button>
+                        </div>
+                      )
+                    ) : null}
                   </div>
                 ))}
                 {orders.orders.length === 0 ? (

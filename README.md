@@ -26,6 +26,7 @@ pnpm dev
 - P1 member/coupon smoke against a running API: `pnpm smoke:p1-members`
 - P1 inventory smoke against a running API: `pnpm smoke:p1-inventory`
 - P1 recipe costing smoke against a running API: `pnpm smoke:p1-recipes`
+- P1 feedback/profile smoke against a running API: `pnpm smoke:p1-feedback`
 - P0 closeout checklist: `docs/P0_EXIT_CRITERIA.md`
 
 This repo includes `.npmrc` settings that use a hoisted/copy install strategy. That is slower than
@@ -57,6 +58,11 @@ and checks the linked inventory adjustment history.
 `pnpm smoke:p1-recipes` expects a running API. It creates a real ingredient, verifies FOH
 cannot change ingredient or recipe setup, saves a one-line recipe for an available menu item,
 and checks cost, margin, low-stock flag, and operations reporting.
+
+`pnpm smoke:p1-feedback` expects a running API. It creates a real customer order, closes it
+through FOH, verifies feedback cannot be submitted before checkout, submits customer feedback,
+checks FOH cannot process feedback, resolves it through management, and confirms member profile
+history includes the order, payment, and feedback.
 
 `pnpm test` runs package unit tests for shared contracts, API auth/session helpers, and web
 request/component behavior. It does not start the database or browser.
@@ -91,7 +97,7 @@ docs          rewrite plan and architecture notes
 - `/manage/staff` - staff accounts, roles, active access, and password resets
 - `/manage/print-jobs` - kitchen ticket queue review and order reprints
 - `/manage/analytics` - revenue, payments, orders, and top items
-- `/manage/operations` - suppliers, inventory adjustments, stocktakes, ingredients, recipes, members, coupons, KDS devices, and audit logs
+- `/manage/operations` - suppliers, inventory adjustments, stocktakes, ingredients, recipes, feedback, members, coupons, KDS devices, and audit logs
 - `/manage/purchasing` - purchase orders, receiving, and stock movement tied to suppliers
 - `apps/printer` - demo poller for `/v1/printer/jobs`
 
@@ -147,9 +153,10 @@ tax-rule JSON, price-includes-tax behavior, enabled payment methods, and tip set
 
 Operations management covers supplier contacts, stock adjustment history, applied stocktakes,
 ingredient stock/cost records, recipe cost and margin rollups, member records with payment/spend
-summaries, coupon records with minimum subtotals and redemption counts, KDS device tokens, and
-audit history. Purchasing adds P1 purchase orders and receiving: received quantities update menu
-item stock and create linked inventory movement rows. Customer-facing membership now supports
-optional phone capture, coupon redemption at order/checkout, and points accrual on paid FOH
-checkout. Supplier invoices, complex unit conversions, customer profile history, feedback,
-marketing automation, and real payment gateway reconciliation remain later-phase work.
+summaries and recent order/payment/coupon/feedback history, customer feedback review, coupon
+records with minimum subtotals and redemption counts, KDS device tokens, and audit history.
+Purchasing adds P1 purchase orders and receiving: received quantities update menu item stock and
+create linked inventory movement rows. Customer-facing membership now supports optional phone
+capture, coupon redemption at order/checkout, points accrual on paid FOH checkout, and post-checkout
+order feedback. Supplier invoices, complex unit conversions, marketing automation, and real payment
+gateway reconciliation remain later-phase work.

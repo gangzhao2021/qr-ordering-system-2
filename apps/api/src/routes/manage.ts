@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import {
+  FEEDBACK_STATUSES,
   LANGUAGE_CODES,
   PAYMENT_METHODS,
   STAFF_ROLES,
@@ -33,6 +34,7 @@ import {
   reprintOrder,
   rotateDiningTableQrToken,
   receivePurchaseOrder,
+  updateCustomerFeedbackStatus,
   updateDiningTable,
   updateCoupon,
   updateIngredient,
@@ -241,6 +243,10 @@ const recipeBodySchema = z.object({
     .max(100),
 });
 
+const feedbackStatusBodySchema = z.object({
+  status: z.enum(FEEDBACK_STATUSES),
+});
+
 manageRouter.get("/store-settings", async (_req, res, next) => {
   try {
     res.json(await getStoreSettings());
@@ -420,6 +426,16 @@ manageRouter.post("/operations/recipes", async (req, res, next) => {
   try {
     const body = recipeBodySchema.parse(req.body);
     res.status(201).json(await upsertRecipe(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.patch("/operations/feedback/:id", async (req, res, next) => {
+  try {
+    const params = z.object({ id: z.string().trim().min(1) }).parse(req.params);
+    const body = feedbackStatusBodySchema.parse(req.body);
+    res.json(await updateCustomerFeedbackStatus(params.id, body));
   } catch (error) {
     next(error);
   }

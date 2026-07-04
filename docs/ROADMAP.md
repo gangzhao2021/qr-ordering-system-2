@@ -27,13 +27,14 @@
 - Customer-facing member phone capture, coupon redemption, payment points, and operations summaries
 - Applied stocktake workflow with linked inventory adjustments
 - Recipe/BOM costing foundation with ingredient unit costs and menu item margin rollups
-- Customer feedback and richer customer profile history
+- Post-checkout customer feedback and member order/payment/coupon/feedback history
 
 ## P2 - Platform And Scale
 
 - DEV multi-store onboarding
 - KDS heartbeat, station authorization, and category routing enforcement
 - Stripe/Interac/WeChat Pay/Alipay Hosted Checkout and reconciliation
+- Marketing automation and richer customer segmentation
 - Deeper analytics dashboards and operational reporting
 - Advanced audit history and operational reporting
 
