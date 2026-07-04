@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { QrCode } from "../components/QrCode";
 import { GET as faviconGET } from "../app/favicon.ico/route";
 import { AuthGate, StaffSessionBar } from "../lib/auth-client";
+import { p0RunbookSteps } from "../lib/p0-runbook";
 
 describe("AuthGate", () => {
   it("renders the loading state while a session is being checked", () => {
@@ -120,5 +121,21 @@ describe("favicon route", () => {
     );
     expect(body).toContain("<svg");
     expect(body).toContain('viewBox="0 0 64 64"');
+  });
+});
+
+describe("p0RunbookSteps", () => {
+  it("keeps the manual smoke path aligned to the P0 role boundary", () => {
+    expect(p0RunbookSteps.map((step) => step.owner)).toEqual([
+      "Customer",
+      "Kitchen",
+      "FOH",
+      "Printer",
+      "FOH",
+      "Management",
+    ]);
+    expect(p0RunbookSteps[1]?.goal).toContain("without mutation controls");
+    expect(p0RunbookSteps.some((step) => step.href === "customer")).toBe(true);
+    expect(p0RunbookSteps.some((step) => step.href === "/foh")).toBe(true);
   });
 });

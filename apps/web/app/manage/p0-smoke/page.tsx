@@ -14,6 +14,7 @@ import {
   StaffSessionBar,
   useRequireRole,
 } from "../../../lib/auth-client";
+import { p0RunbookSteps } from "../../../lib/p0-runbook";
 
 function statusClass(status: P0SmokeStatus) {
   if (status === "READY") return "status ok";
@@ -201,6 +202,42 @@ export default function P0SmokeCockpitPage() {
               ))}
             </div>
           </article>
+        </section>
+
+        <section className="smoke-runbook-section">
+          <div className="row between smoke-section-header">
+            <div>
+              <h2>P0 manual runbook</h2>
+              <p className="meta">
+                Run these steps in order before a restaurant pilot.
+              </p>
+            </div>
+            <span className="status">{p0RunbookSteps.length} steps</span>
+          </div>
+          <div className="smoke-runbook-grid">
+            {p0RunbookSteps.map((step) => {
+              const href = step.href === "customer" ? customerHref : step.href;
+              return (
+                <article className="card smoke-runbook-step" key={step.step}>
+                  <div className="row between">
+                    <span className="smoke-step-number">{step.step}</span>
+                    <span className="status">{step.owner}</span>
+                  </div>
+                  <div>
+                    <h3>{step.title}</h3>
+                    <p>{step.goal}</p>
+                  </div>
+                  <div className="smoke-proof">
+                    <span>Proof</span>
+                    <strong>{step.proof}</strong>
+                  </div>
+                  <Link className="link-btn ghost" href={href}>
+                    Open step
+                  </Link>
+                </article>
+              );
+            })}
+          </div>
         </section>
 
         <section className="grid two smoke-stage-grid">

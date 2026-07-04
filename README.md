@@ -33,6 +33,7 @@ database commands or starting the API.
 set `API_BASE_URL` to target another port. The smoke uses demo staff accounts, table 8,
 and the unlimited-stock Jasmine Tea item so it can be repeated without draining tracked stock.
 It also verifies the Kitchen role can read pending items but cannot mutate live FOH order state.
+The management P0 smoke cockpit includes the matching manual runbook for a pilot check.
 
 `pnpm test` runs package unit tests for shared contracts, API auth/session helpers, and web
 request/component behavior. It does not start the database or browser.
