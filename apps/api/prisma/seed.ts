@@ -278,6 +278,37 @@ const suppliers = [
   },
 ];
 
+const purchaseOrders = [
+  {
+    id: "po_demo_noodle_restock",
+    supplierId: "supplier_noodle_shop",
+    orderNumber: "PO-DEMO-001",
+    status: "ORDERED" as const,
+    expectedAt: new Date("2026-07-05T14:00:00.000Z"),
+    orderedAt: new Date("2026-07-04T14:00:00.000Z"),
+    receivedAt: null,
+    notes: "Demo restock order for P1 purchasing workflow.",
+    lines: [
+      {
+        id: "po_line_beef_noodle",
+        menuItemId: "item_beef_noodle",
+        quantityOrdered: 6,
+        quantityReceived: 0,
+        unitCostCents: 520,
+        note: "Soup base and noodle bundle",
+      },
+      {
+        id: "po_line_dumplings",
+        menuItemId: "item_dumplings",
+        quantityOrdered: 8,
+        quantityReceived: 0,
+        unitCostCents: 310,
+        note: "Frozen tray pack",
+      },
+    ],
+  },
+];
+
 const members = [
   {
     id: "member_amy",
@@ -439,6 +470,53 @@ async function main() {
         isActive: true,
       },
     });
+  }
+
+  for (const purchaseOrder of purchaseOrders) {
+    await prisma.purchaseOrder.upsert({
+      where: {
+        storeId_orderNumber: {
+          storeId: store.id,
+          orderNumber: purchaseOrder.orderNumber,
+        },
+      },
+      update: {
+        supplierId: purchaseOrder.supplierId,
+        status: purchaseOrder.status,
+        expectedAt: purchaseOrder.expectedAt,
+        orderedAt: purchaseOrder.orderedAt,
+        receivedAt: purchaseOrder.receivedAt,
+        notes: purchaseOrder.notes,
+      },
+      create: {
+        id: purchaseOrder.id,
+        storeId: store.id,
+        supplierId: purchaseOrder.supplierId,
+        orderNumber: purchaseOrder.orderNumber,
+        status: purchaseOrder.status,
+        expectedAt: purchaseOrder.expectedAt,
+        orderedAt: purchaseOrder.orderedAt,
+        receivedAt: purchaseOrder.receivedAt,
+        notes: purchaseOrder.notes,
+      },
+    });
+    for (const line of purchaseOrder.lines) {
+      await prisma.purchaseOrderLine.upsert({
+        where: { id: line.id },
+        update: {
+          purchaseOrderId: purchaseOrder.id,
+          menuItemId: line.menuItemId,
+          quantityOrdered: line.quantityOrdered,
+          quantityReceived: line.quantityReceived,
+          unitCostCents: line.unitCostCents,
+          note: line.note,
+        },
+        create: {
+          ...line,
+          purchaseOrderId: purchaseOrder.id,
+        },
+      });
+    }
   }
 
   for (const member of members) {

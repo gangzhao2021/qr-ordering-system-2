@@ -77,6 +77,15 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS;
 export type PaymentMethodOption = PaymentMethod;
 
+export const PURCHASE_ORDER_STATUSES = [
+  "DRAFT",
+  "ORDERED",
+  "PARTIALLY_RECEIVED",
+  "RECEIVED",
+  "CANCELED",
+] as const;
+export type PurchaseOrderStatus = (typeof PURCHASE_ORDER_STATUSES)[number];
+
 export type LocalizedText = {
   en?: string | null;
   "fr-CA"?: string | null;
@@ -553,6 +562,8 @@ export type InventoryAdjustment = {
   id: string;
   menuItemId: string;
   menuItemName: string;
+  purchaseOrderId?: string | null;
+  purchaseOrderNumber?: string | null;
   quantityDelta: number;
   reason: string;
   note?: string | null;
@@ -596,9 +607,35 @@ export type AuditLog = {
   createdAt: string;
 };
 
+export type PurchaseOrderLine = {
+  id: string;
+  menuItemId: string;
+  menuItemName: string;
+  quantityOrdered: number;
+  quantityReceived: number;
+  unitCostCents?: number | null;
+  note?: string | null;
+};
+
+export type PurchaseOrder = {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  orderNumber: string;
+  status: PurchaseOrderStatus;
+  expectedAt?: string | null;
+  orderedAt?: string | null;
+  receivedAt?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lines: PurchaseOrderLine[];
+};
+
 export type ManageOperationsResponse = {
   store: StoreSummary;
   suppliers: Supplier[];
+  purchaseOrders: PurchaseOrder[];
   inventoryAdjustments: InventoryAdjustment[];
   members: Member[];
   coupons: Coupon[];
@@ -664,6 +701,26 @@ export type UpdateSupplierRequest = Partial<
     "name" | "contactName" | "phone" | "email" | "notes" | "isActive"
   >
 >;
+
+export type CreatePurchaseOrderRequest = {
+  supplierId: string;
+  orderNumber?: string | null;
+  expectedAt?: string | null;
+  notes?: string | null;
+  lines: Array<{
+    menuItemId: string;
+    quantityOrdered: number;
+    unitCostCents?: number | null;
+    note?: string | null;
+  }>;
+};
+
+export type ReceivePurchaseOrderRequest = {
+  lines: Array<{
+    lineId: string;
+    quantityReceived: number;
+  }>;
+};
 
 export type CreateInventoryAdjustmentRequest = {
   menuItemId: string;

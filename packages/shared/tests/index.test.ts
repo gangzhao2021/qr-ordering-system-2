@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PAYMENT_METHODS,
+  PURCHASE_ORDER_STATUSES,
   STAFF_ROLES,
   USER_ROLES,
   formatCents,
@@ -25,6 +26,18 @@ describe("payment constants", () => {
       "UNIONPAY",
       "GIFT_CARD",
       "OTHER",
+    ]);
+  });
+});
+
+describe("purchase order constants", () => {
+  it("supports the P1 receiving lifecycle", () => {
+    expect(PURCHASE_ORDER_STATUSES).toEqual([
+      "DRAFT",
+      "ORDERED",
+      "PARTIALLY_RECEIVED",
+      "RECEIVED",
+      "CANCELED",
     ]);
   });
 });

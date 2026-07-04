@@ -62,6 +62,14 @@ enum PaymentMethod {
   OTHER
 }
 
+enum PurchaseOrderStatus {
+  DRAFT
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELED
+}
+
 model Store {
   id                   String   @id @default(cuid())
   name                 String   @unique
@@ -98,6 +106,7 @@ model Store {
   printJobs            PrintJob[]
   payments             Payment[]
   suppliers            Supplier[]
+  purchaseOrders       PurchaseOrder[]
   inventoryAdjustments InventoryAdjustment[]
   members              Member[]
   coupons              Coupon[]
@@ -186,6 +195,7 @@ model MenuItem {
   category   MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
   inventoryAdjustments InventoryAdjustment[]
+  purchaseOrderLines PurchaseOrderLine[]
 
   @@index([storeId])
   @@index([categoryId])
@@ -316,15 +326,60 @@ model Supplier {
   updatedAt   DateTime @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
 
   @@index([storeId])
   @@unique([storeId, name])
+}
+
+model PurchaseOrder {
+  id          String              @id @default(cuid())
+  storeId     String
+  supplierId  String
+  orderNumber String
+  status      PurchaseOrderStatus @default(ORDERED)
+  expectedAt  DateTime?
+  orderedAt   DateTime?
+  receivedAt  DateTime?
+  notes       String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  store    Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  supplier Supplier            @relation(fields: [supplierId], references: [id])
+  lines    PurchaseOrderLine[]
+  inventoryAdjustments InventoryAdjustment[]
+
+  @@unique([storeId, orderNumber])
+  @@index([storeId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([expectedAt])
+}
+
+model PurchaseOrderLine {
+  id               String   @id @default(cuid())
+  purchaseOrderId  String
+  menuItemId       String
+  quantityOrdered  Int
+  quantityReceived Int      @default(0)
+  unitCostCents    Int?
+  note             String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  menuItem      MenuItem      @relation(fields: [menuItemId], references: [id])
+
+  @@index([purchaseOrderId])
+  @@index([menuItemId])
 }
 
 model InventoryAdjustment {
   id            String   @id @default(cuid())
   storeId       String
   menuItemId    String
+  purchaseOrderId String?
   quantityDelta Int
   reason        String
   note          String?
@@ -332,9 +387,11 @@ model InventoryAdjustment {
 
   store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
 
   @@index([storeId])
   @@index([menuItemId])
+  @@index([purchaseOrderId])
 }
 
 model Member {

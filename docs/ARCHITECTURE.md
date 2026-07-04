@@ -59,6 +59,8 @@ Customer order items snapshot the selected modifier names, modifier price deltas
 
 Management operations are lightweight transactional records in the API database: suppliers, inventory adjustments, members, coupons, KDS device tokens, and audit logs. Inventory adjustments update tracked `MenuItem.stockQuantity` and keep a recent adjustment history. Coupons and members are management records only in P0; customer redemption and points accrual are later workflow work.
 
+P1 purchasing adds `PurchaseOrder` and `PurchaseOrderLine` records. Management can create an ordered purchase order against an active supplier, then receive each line partially or fully. Receiving increments `MenuItem.stockQuantity`, creates linked `InventoryAdjustment` rows, and moves the purchase order to `PARTIALLY_RECEIVED` or `RECEIVED`. Unit cost is stored for receiving context only; recipe/BOM costing and supplier invoice reconciliation remain later-phase work.
+
 KDS device records provide token and station inventory for device setup. The current kitchen page is still staff-session based and read-only; device-token heartbeat and station authorization are later-phase hardening.
 
 ## Table Management

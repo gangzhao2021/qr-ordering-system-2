@@ -15,6 +15,7 @@ import {
   createMember,
   createMenuCategory,
   createDiningTable,
+  createPurchaseOrder,
   createSupplier,
   deleteMenuCategory,
   deleteDiningTable,
@@ -29,6 +30,7 @@ import {
   getStoreSettings,
   reprintOrder,
   rotateDiningTableQrToken,
+  receivePurchaseOrder,
   updateDiningTable,
   updateCoupon,
   updateKdsDevice,
@@ -157,6 +159,42 @@ const kdsDeviceBodySchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+const purchaseOrderBodySchema = z.object({
+  supplierId: z.string().trim().min(1),
+  orderNumber: z.string().trim().max(80).optional().nullable(),
+  expectedAt: z.string().datetime().optional().nullable(),
+  notes: z.string().trim().max(500).optional().nullable(),
+  lines: z
+    .array(
+      z.object({
+        menuItemId: z.string().trim().min(1),
+        quantityOrdered: z.number().int().min(1).max(9999),
+        unitCostCents: z
+          .number()
+          .int()
+          .min(0)
+          .max(99999999)
+          .optional()
+          .nullable(),
+        note: z.string().trim().max(300).optional().nullable(),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
+const receivePurchaseOrderBodySchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        lineId: z.string().trim().min(1),
+        quantityReceived: z.number().int().min(1).max(9999),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
 manageRouter.get("/store-settings", async (_req, res, next) => {
   try {
     res.json(await getStoreSettings());
@@ -260,6 +298,30 @@ manageRouter.patch("/operations/suppliers/:id", async (req, res, next) => {
     next(error);
   }
 });
+
+manageRouter.post("/operations/purchase-orders", async (req, res, next) => {
+  try {
+    const body = purchaseOrderBodySchema.parse(req.body);
+    res.status(201).json(await createPurchaseOrder(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.post(
+  "/operations/purchase-orders/:id/receive",
+  async (req, res, next) => {
+    try {
+      const params = z
+        .object({ id: z.string().trim().min(1) })
+        .parse(req.params);
+      const body = receivePurchaseOrderBodySchema.parse(req.body);
+      res.json(await receivePurchaseOrder(params.id, body));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 manageRouter.post(
   "/operations/inventory-adjustments",

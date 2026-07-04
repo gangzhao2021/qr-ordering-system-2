@@ -23,7 +23,8 @@
 
 ## P1 - Store Operations
 
-- Purchase orders, supplier receiving, recipes/BOM costing, and stocktake workflow
+- Purchase orders and supplier receiving tied to menu item stock
+- Recipes/BOM costing and stocktake workflow
 - Customer-facing members, coupons, points, feedback, and customer profile
 
 ## P2 - Platform And Scale

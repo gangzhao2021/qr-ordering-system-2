@@ -48,6 +48,11 @@ const links = [
     title: "Operations",
     body: "Suppliers, stock movement, coupons, members, KDS devices, and audit logs.",
   },
+  {
+    href: "/manage/purchasing",
+    title: "Purchasing",
+    body: "Purchase orders, receiving, and stock movement.",
+  },
 ];
 
 export default function ManagePage() {

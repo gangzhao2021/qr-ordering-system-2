@@ -22,6 +22,7 @@ pnpm dev
 - Demo printer once: `pnpm printer:once`
 - Unit tests: `pnpm test`
 - P0 smoke against a running API: `pnpm smoke:p0`
+- P1 purchasing smoke against a running API: `pnpm smoke:p1`
 - P0 closeout checklist: `docs/P0_EXIT_CRITERIA.md`
 
 This repo includes `.npmrc` settings that use a hoisted/copy install strategy. That is slower than
@@ -36,6 +37,10 @@ and the unlimited-stock Jasmine Tea item so it can be repeated without draining 
 It also verifies the Kitchen role can read pending items but cannot mutate live FOH order state.
 The management P0 smoke cockpit includes the matching manual runbook for a pilot check.
 Use `docs/P0_EXIT_CRITERIA.md` as the canonical gate for deciding whether P0 is complete.
+
+`pnpm smoke:p1` also expects a running API. It creates a real purchase order, receives it in
+two steps, verifies FOH cannot create management purchase orders, and confirms received stock
+updates the menu item quantity with linked inventory movement rows.
 
 `pnpm test` runs package unit tests for shared contracts, API auth/session helpers, and web
 request/component behavior. It does not start the database or browser.
@@ -71,6 +76,7 @@ docs          rewrite plan and architecture notes
 - `/manage/print-jobs` - kitchen ticket queue review and order reprints
 - `/manage/analytics` - revenue, payments, orders, and top items
 - `/manage/operations` - suppliers, inventory adjustments, members, coupons, KDS devices, and audit logs
+- `/manage/purchasing` - purchase orders, receiving, and stock movement tied to suppliers
 - `apps/printer` - demo poller for `/v1/printer/jobs`
 
 ## Current Data Layer
@@ -124,6 +130,7 @@ Store settings include Canada and China presets, supported languages, invoice in
 tax-rule JSON, price-includes-tax behavior, enabled payment methods, and tip settings.
 
 Operations management covers supplier contacts, stock adjustment history, member records, coupon
-records, KDS device tokens, and audit history. It is intentionally lightweight; purchase orders,
-recipe BOM costing, supplier receiving, customer-facing coupon redemption, and real payment
-gateway reconciliation remain later-phase work.
+records, KDS device tokens, and audit history. Purchasing adds P1 purchase orders and receiving:
+received quantities update menu item stock and create linked inventory movement rows. Recipe BOM
+costing, supplier invoices, customer-facing coupon redemption, and real payment gateway
+reconciliation remain later-phase work.

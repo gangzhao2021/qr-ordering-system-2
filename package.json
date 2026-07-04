@@ -24,6 +24,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "smoke:p0": "node scripts/smoke-p0.mjs",
+    "smoke:p1": "node scripts/smoke-p1.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

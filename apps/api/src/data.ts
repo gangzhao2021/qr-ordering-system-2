@@ -12,6 +12,7 @@ import type {
   CreateMenuCategoryRequest,
   CreateMenuItemRequest,
   CreateOrderRequest,
+  CreatePurchaseOrderRequest,
   CreateServiceRequestRequest,
   CreateStaffUserRequest,
   CreateSupplierRequest,
@@ -44,7 +45,9 @@ import type {
   P0SmokeCheck,
   P0SmokeStatus,
   PrintJob,
+  PurchaseOrder,
   RefundPaymentRequest,
+  ReceivePurchaseOrderRequest,
   ServiceRequest,
   ServiceRequestStatus,
   StoreMarket,
@@ -599,20 +602,70 @@ function mapSupplier(supplier: {
 function mapInventoryAdjustment(adjustment: {
   id: string;
   menuItemId: string;
+  purchaseOrderId: string | null;
   quantityDelta: number;
   reason: string;
   note: string | null;
   createdAt: Date;
   menuItem: { name: string };
+  purchaseOrder?: { orderNumber: string } | null;
 }): InventoryAdjustment {
   return {
     id: adjustment.id,
     menuItemId: adjustment.menuItemId,
     menuItemName: adjustment.menuItem.name,
+    purchaseOrderId: adjustment.purchaseOrderId,
+    purchaseOrderNumber: adjustment.purchaseOrder?.orderNumber ?? null,
     quantityDelta: adjustment.quantityDelta,
     reason: adjustment.reason,
     note: adjustment.note,
     createdAt: toIso(adjustment.createdAt),
+  };
+}
+
+function mapPurchaseOrder(order: {
+  id: string;
+  supplierId: string;
+  orderNumber: string;
+  status: PurchaseOrder["status"];
+  expectedAt: Date | null;
+  orderedAt: Date | null;
+  receivedAt: Date | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  supplier: { name: string };
+  lines: Array<{
+    id: string;
+    menuItemId: string;
+    quantityOrdered: number;
+    quantityReceived: number;
+    unitCostCents: number | null;
+    note: string | null;
+    menuItem: { name: string };
+  }>;
+}): PurchaseOrder {
+  return {
+    id: order.id,
+    supplierId: order.supplierId,
+    supplierName: order.supplier.name,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    expectedAt: order.expectedAt ? toIso(order.expectedAt) : null,
+    orderedAt: order.orderedAt ? toIso(order.orderedAt) : null,
+    receivedAt: order.receivedAt ? toIso(order.receivedAt) : null,
+    notes: order.notes,
+    createdAt: toIso(order.createdAt),
+    updatedAt: toIso(order.updatedAt),
+    lines: order.lines.map((line) => ({
+      id: line.id,
+      menuItemId: line.menuItemId,
+      menuItemName: line.menuItem.name,
+      quantityOrdered: line.quantityOrdered,
+      quantityReceived: line.quantityReceived,
+      unitCostCents: line.unitCostCents,
+      note: line.note,
+    })),
   };
 }
 
@@ -1868,6 +1921,7 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
   const store = await getDefaultStore();
   const [
     suppliers,
+    purchaseOrders,
     inventoryAdjustments,
     members,
     coupons,
@@ -1879,11 +1933,26 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
       orderBy: { name: "asc" },
       take: 100,
     }),
+    prisma.purchaseOrder.findMany({
+      where: { storeId: store.id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: {
+        supplier: { select: { name: true } },
+        lines: {
+          orderBy: { createdAt: "asc" },
+          include: { menuItem: { select: { name: true } } },
+        },
+      },
+    }),
     prisma.inventoryAdjustment.findMany({
       where: { storeId: store.id },
       orderBy: { createdAt: "desc" },
       take: 50,
-      include: { menuItem: { select: { name: true } } },
+      include: {
+        menuItem: { select: { name: true } },
+        purchaseOrder: { select: { orderNumber: true } },
+      },
     }),
     prisma.member.findMany({
       where: { storeId: store.id },
@@ -1910,6 +1979,7 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
   return {
     store: mapStore(store),
     suppliers: suppliers.map(mapSupplier),
+    purchaseOrders: purchaseOrders.map(mapPurchaseOrder),
     inventoryAdjustments: inventoryAdjustments.map(mapInventoryAdjustment),
     members: members.map(mapMember),
     coupons: coupons.map(mapCoupon),
@@ -2272,6 +2342,246 @@ export async function updateSupplier(
     },
   });
   return mapSupplier(supplier);
+}
+
+function assertPurchaseOrderLines(input: CreatePurchaseOrderRequest["lines"]) {
+  const itemIds = new Set<string>();
+  for (const line of input) {
+    const itemId = line.menuItemId.trim();
+    if (itemIds.has(itemId)) {
+      throw new HttpError(
+        400,
+        "DUPLICATE_PURCHASE_ITEM",
+        "Each menu item can appear only once on a purchase order",
+      );
+    }
+    itemIds.add(itemId);
+  }
+  return Array.from(itemIds);
+}
+
+export async function createPurchaseOrder(input: CreatePurchaseOrderRequest) {
+  const store = await getDefaultStore();
+  const itemIds = assertPurchaseOrderLines(input.lines);
+  const orderNumber =
+    input.orderNumber?.trim() ||
+    `PO-${new Date().toISOString().slice(0, 10)}-${Date.now()}`;
+  const expectedAt = input.expectedAt ? new Date(input.expectedAt) : null;
+
+  return prisma.$transaction(async (tx) => {
+    const [supplier, items] = await Promise.all([
+      tx.supplier.findFirst({
+        where: {
+          id: input.supplierId,
+          storeId: store.id,
+          isActive: true,
+        },
+      }),
+      tx.menuItem.findMany({
+        where: { storeId: store.id, id: { in: itemIds } },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!supplier) {
+      throw new HttpError(404, "SUPPLIER_NOT_FOUND", "Supplier not found");
+    }
+    if (items.length !== itemIds.length) {
+      throw new HttpError(404, "MENU_ITEM_NOT_FOUND", "Menu item not found");
+    }
+
+    const purchaseOrder = await tx.purchaseOrder.create({
+      data: {
+        storeId: store.id,
+        supplierId: supplier.id,
+        orderNumber,
+        status: "ORDERED",
+        expectedAt,
+        orderedAt: new Date(),
+        notes: input.notes?.trim() || null,
+        lines: {
+          create: input.lines.map((line) => ({
+            menuItemId: line.menuItemId.trim(),
+            quantityOrdered: line.quantityOrdered,
+            unitCostCents: line.unitCostCents ?? null,
+            note: line.note?.trim() || null,
+          })),
+        },
+      },
+      include: {
+        supplier: { select: { name: true } },
+        lines: {
+          orderBy: { createdAt: "asc" },
+          include: { menuItem: { select: { name: true } } },
+        },
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId: store.id,
+        action: "PURCHASE_ORDER_CREATED",
+        entityType: "PurchaseOrder",
+        entityId: purchaseOrder.id,
+        metadata: {
+          orderNumber: purchaseOrder.orderNumber,
+          supplierId: supplier.id,
+          lineCount: purchaseOrder.lines.length,
+        },
+      },
+    });
+
+    return mapPurchaseOrder(purchaseOrder);
+  });
+}
+
+export async function receivePurchaseOrder(
+  purchaseOrderId: string,
+  input: ReceivePurchaseOrderRequest,
+) {
+  const store = await getDefaultStore();
+  return prisma.$transaction(async (tx) => {
+    const purchaseOrder = await tx.purchaseOrder.findFirst({
+      where: { id: purchaseOrderId, storeId: store.id },
+      include: {
+        supplier: { select: { name: true } },
+        lines: {
+          include: {
+            menuItem: { select: { id: true, name: true, stockQuantity: true } },
+          },
+        },
+      },
+    });
+    if (!purchaseOrder) {
+      throw new HttpError(
+        404,
+        "PURCHASE_ORDER_NOT_FOUND",
+        "Purchase order not found",
+      );
+    }
+    if (
+      purchaseOrder.status === "RECEIVED" ||
+      purchaseOrder.status === "CANCELED"
+    ) {
+      throw new HttpError(
+        400,
+        "PURCHASE_ORDER_CLOSED",
+        "Purchase order cannot receive more items",
+      );
+    }
+
+    const receiveByLine = new Map(
+      input.lines.map((line) => [line.lineId, line.quantityReceived]),
+    );
+    const knownLineIds = new Set(purchaseOrder.lines.map((line) => line.id));
+    for (const lineId of receiveByLine.keys()) {
+      if (!knownLineIds.has(lineId)) {
+        throw new HttpError(
+          404,
+          "PURCHASE_ORDER_LINE_NOT_FOUND",
+          "Purchase order line not found",
+        );
+      }
+    }
+    let receivedAny = false;
+    const projected = purchaseOrder.lines.map((line) => {
+      const quantityReceived = receiveByLine.get(line.id) ?? 0;
+      if (quantityReceived <= 0) {
+        return {
+          id: line.id,
+          quantityOrdered: line.quantityOrdered,
+          quantityReceived: line.quantityReceived,
+        };
+      }
+      const remaining = line.quantityOrdered - line.quantityReceived;
+      if (quantityReceived > remaining) {
+        throw new HttpError(
+          400,
+          "RECEIVE_QUANTITY_TOO_HIGH",
+          `${line.menuItem.name} has only ${remaining} remaining on this purchase order`,
+        );
+      }
+      receivedAny = true;
+      return {
+        id: line.id,
+        quantityOrdered: line.quantityOrdered,
+        quantityReceived: line.quantityReceived + quantityReceived,
+      };
+    });
+
+    if (!receivedAny) {
+      throw new HttpError(
+        400,
+        "NO_RECEIVE_LINES",
+        "At least one purchase order line must be received",
+      );
+    }
+
+    for (const line of purchaseOrder.lines) {
+      const quantityReceived = receiveByLine.get(line.id) ?? 0;
+      if (quantityReceived <= 0) continue;
+      await tx.purchaseOrderLine.update({
+        where: { id: line.id },
+        data: { quantityReceived: { increment: quantityReceived } },
+      });
+      await tx.menuItem.update({
+        where: { id: line.menuItemId },
+        data: {
+          stockQuantity: (line.menuItem.stockQuantity ?? 0) + quantityReceived,
+        },
+      });
+      await tx.inventoryAdjustment.create({
+        data: {
+          storeId: store.id,
+          menuItemId: line.menuItemId,
+          purchaseOrderId: purchaseOrder.id,
+          quantityDelta: quantityReceived,
+          reason: "Purchase order received",
+          note: `${purchaseOrder.orderNumber} / ${line.menuItem.name}`,
+        },
+      });
+    }
+
+    const status = projected.every(
+      (line) => line.quantityReceived >= line.quantityOrdered,
+    )
+      ? "RECEIVED"
+      : "PARTIALLY_RECEIVED";
+
+    await tx.purchaseOrder.update({
+      where: { id: purchaseOrder.id },
+      data: {
+        status,
+        receivedAt: status === "RECEIVED" ? new Date() : null,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId: store.id,
+        action: "PURCHASE_ORDER_RECEIVED",
+        entityType: "PurchaseOrder",
+        entityId: purchaseOrder.id,
+        metadata: {
+          orderNumber: purchaseOrder.orderNumber,
+          receivedLines: input.lines.length,
+          status,
+        },
+      },
+    });
+
+    const updated = await tx.purchaseOrder.findUniqueOrThrow({
+      where: { id: purchaseOrder.id },
+      include: {
+        supplier: { select: { name: true } },
+        lines: {
+          orderBy: { createdAt: "asc" },
+          include: { menuItem: { select: { name: true } } },
+        },
+      },
+    });
+    return mapPurchaseOrder(updated);
+  });
 }
 
 export async function createInventoryAdjustment(
