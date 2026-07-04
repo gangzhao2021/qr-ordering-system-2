@@ -610,6 +610,12 @@ export type CreateSupplierRequest = Pick<
   Supplier,
   "name" | "contactName" | "phone" | "email" | "notes"
 >;
+export type UpdateSupplierRequest = Partial<
+  Pick<
+    Supplier,
+    "name" | "contactName" | "phone" | "email" | "notes" | "isActive"
+  >
+>;
 
 export type CreateInventoryAdjustmentRequest = {
   menuItemId: string;
@@ -621,11 +627,15 @@ export type CreateInventoryAdjustmentRequest = {
 export type CreateMemberRequest = Pick<Member, "name" | "phone" | "email"> & {
   points?: number;
 };
+export type UpdateMemberRequest = Partial<
+  Pick<Member, "name" | "phone" | "email" | "points">
+>;
 
 export type CreateCouponRequest = Pick<
   Coupon,
   "code" | "discountType" | "discountValue" | "isActive" | "startsAt" | "endsAt"
 >;
+export type UpdateCouponRequest = Partial<CreateCouponRequest>;
 
 export type CreateKdsDeviceRequest = Pick<
   KdsDevice,
@@ -633,6 +643,7 @@ export type CreateKdsDeviceRequest = Pick<
 > & {
   token?: string;
 };
+export type UpdateKdsDeviceRequest = Partial<CreateKdsDeviceRequest>;
 
 export function formatCents(
   amountCents: number,

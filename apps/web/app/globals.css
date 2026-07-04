@@ -1018,6 +1018,29 @@ textarea {
   margin-top: 16px;
 }
 
+.operations-edit-list,
+.operations-record-card {
+  display: grid;
+  gap: 10px;
+}
+
+.operations-record-card {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.operations-record-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.operations-active-check {
+  align-self: end;
+  min-height: 40px;
+}
+
 .token-row {
   border: 1px solid var(--line);
   border-radius: 8px;

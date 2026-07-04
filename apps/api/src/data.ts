@@ -51,11 +51,15 @@ import type {
   TableStatus,
   TaxRule,
   UpdateDiningTableRequest,
+  UpdateCouponRequest,
+  UpdateKdsDeviceRequest,
   UpdateMenuCategoryRequest,
   UpdateMenuItemInventoryRequest,
   UpdateMenuItemRequest,
+  UpdateMemberRequest,
   UpdateStaffUserRequest,
   UpdateStoreSettingsRequest,
+  UpdateSupplierRequest,
 } from "@qr2/shared";
 import { STAFF_ROLES } from "@qr2/shared";
 import { hashPassword } from "./auth.js";
@@ -1926,6 +1930,40 @@ export async function createSupplier(input: CreateSupplierRequest) {
   return mapSupplier(supplier);
 }
 
+export async function updateSupplier(
+  supplierId: string,
+  input: UpdateSupplierRequest,
+) {
+  const store = await getDefaultStore();
+  const existing = await prisma.supplier.findFirst({
+    where: { id: supplierId, storeId: store.id },
+  });
+  if (!existing) {
+    throw new HttpError(404, "SUPPLIER_NOT_FOUND", "Supplier not found");
+  }
+
+  const supplier = await prisma.supplier.update({
+    where: { id: existing.id },
+    data: {
+      ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+      ...(input.contactName !== undefined
+        ? { contactName: input.contactName?.trim() || null }
+        : {}),
+      ...(input.phone !== undefined
+        ? { phone: input.phone?.trim() || null }
+        : {}),
+      ...(input.email !== undefined
+        ? { email: input.email?.trim() || null }
+        : {}),
+      ...(input.notes !== undefined
+        ? { notes: input.notes?.trim() || null }
+        : {}),
+      ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+    },
+  });
+  return mapSupplier(supplier);
+}
+
 export async function createInventoryAdjustment(
   input: CreateInventoryAdjustmentRequest,
 ) {
@@ -1996,6 +2034,32 @@ export async function createMember(input: CreateMemberRequest) {
   return mapMember(member);
 }
 
+export async function updateMember(
+  memberId: string,
+  input: UpdateMemberRequest,
+) {
+  const store = await getDefaultStore();
+  const existing = await prisma.member.findFirst({
+    where: { id: memberId, storeId: store.id },
+  });
+  if (!existing) {
+    throw new HttpError(404, "MEMBER_NOT_FOUND", "Member not found");
+  }
+
+  const member = await prisma.member.update({
+    where: { id: existing.id },
+    data: {
+      ...(input.name !== undefined ? { name: input.name?.trim() || null } : {}),
+      ...(input.phone !== undefined ? { phone: input.phone.trim() } : {}),
+      ...(input.email !== undefined
+        ? { email: input.email?.trim() || null }
+        : {}),
+      ...(input.points !== undefined ? { points: input.points } : {}),
+    },
+  });
+  return mapMember(member);
+}
+
 export async function createCoupon(input: CreateCouponRequest) {
   const store = await getDefaultStore();
   const coupon = await prisma.coupon.upsert({
@@ -2025,6 +2089,42 @@ export async function createCoupon(input: CreateCouponRequest) {
   return mapCoupon(coupon);
 }
 
+export async function updateCoupon(
+  couponId: string,
+  input: UpdateCouponRequest,
+) {
+  const store = await getDefaultStore();
+  const existing = await prisma.coupon.findFirst({
+    where: { id: couponId, storeId: store.id },
+  });
+  if (!existing) {
+    throw new HttpError(404, "COUPON_NOT_FOUND", "Coupon not found");
+  }
+
+  const coupon = await prisma.coupon.update({
+    where: { id: existing.id },
+    data: {
+      ...(input.code !== undefined
+        ? { code: input.code.trim().toUpperCase() }
+        : {}),
+      ...(input.discountType !== undefined
+        ? { discountType: input.discountType }
+        : {}),
+      ...(input.discountValue !== undefined
+        ? { discountValue: input.discountValue }
+        : {}),
+      ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      ...(input.startsAt !== undefined
+        ? { startsAt: input.startsAt ? new Date(input.startsAt) : null }
+        : {}),
+      ...(input.endsAt !== undefined
+        ? { endsAt: input.endsAt ? new Date(input.endsAt) : null }
+        : {}),
+    },
+  });
+  return mapCoupon(coupon);
+}
+
 export async function createKdsDevice(input: CreateKdsDeviceRequest) {
   const store = await getDefaultStore();
   const device = await prisma.kdsDevice.create({
@@ -2034,6 +2134,33 @@ export async function createKdsDevice(input: CreateKdsDeviceRequest) {
       station: input.station?.trim() || null,
       token: input.token?.trim() || `kds_${randomBytes(12).toString("hex")}`,
       isActive: input.isActive,
+    },
+  });
+  return mapKdsDevice(device);
+}
+
+export async function updateKdsDevice(
+  deviceId: string,
+  input: UpdateKdsDeviceRequest,
+) {
+  const store = await getDefaultStore();
+  const existing = await prisma.kdsDevice.findFirst({
+    where: { id: deviceId, storeId: store.id },
+  });
+  if (!existing) {
+    throw new HttpError(404, "KDS_DEVICE_NOT_FOUND", "KDS device not found");
+  }
+
+  const token = input.token?.trim();
+  const device = await prisma.kdsDevice.update({
+    where: { id: existing.id },
+    data: {
+      ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+      ...(input.station !== undefined
+        ? { station: input.station?.trim() || null }
+        : {}),
+      ...(input.token !== undefined && token ? { token } : {}),
+      ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     },
   });
   return mapKdsDevice(device);

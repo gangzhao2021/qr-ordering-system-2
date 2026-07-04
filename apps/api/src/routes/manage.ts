@@ -29,11 +29,15 @@ import {
   reprintOrder,
   rotateDiningTableQrToken,
   updateDiningTable,
+  updateCoupon,
+  updateKdsDevice,
   updateMenuCategory,
   updateMenuItem,
   updateMenuItemInventory,
+  updateMember,
   updateStaffUser,
   updateStoreSettings,
+  updateSupplier,
 } from "../data.js";
 
 export const manageRouter = Router();
@@ -121,6 +125,37 @@ const staffPatchSchema = staffBodySchema
   .partial()
   .extend({ isActive: z.boolean().optional() });
 
+const supplierBodySchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  contactName: z.string().trim().max(120).optional().nullable(),
+  phone: z.string().trim().max(80).optional().nullable(),
+  email: z.string().trim().email().max(200).optional().nullable(),
+  notes: z.string().trim().max(500).optional().nullable(),
+});
+
+const memberBodySchema = z.object({
+  name: z.string().trim().max(120).optional().nullable(),
+  phone: z.string().trim().min(3).max(80),
+  email: z.string().trim().email().max(200).optional().nullable(),
+  points: z.number().int().min(0).max(999999).optional(),
+});
+
+const couponBodySchema = z.object({
+  code: z.string().trim().min(2).max(40),
+  discountType: z.enum(["PERCENT", "AMOUNT"]),
+  discountValue: z.number().int().min(1).max(999999),
+  isActive: z.boolean().default(true),
+  startsAt: z.string().datetime().optional().nullable(),
+  endsAt: z.string().datetime().optional().nullable(),
+});
+
+const kdsDeviceBodySchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  station: z.string().trim().max(80).optional().nullable(),
+  token: z.string().trim().max(160).optional(),
+  isActive: z.boolean().default(true),
+});
+
 manageRouter.get("/store-settings", async (_req, res, next) => {
   try {
     res.json(await getStoreSettings());
@@ -197,16 +232,21 @@ manageRouter.get("/operations", async (_req, res, next) => {
 
 manageRouter.post("/operations/suppliers", async (req, res, next) => {
   try {
-    const body = z
-      .object({
-        name: z.string().trim().min(1).max(160),
-        contactName: z.string().trim().max(120).optional().nullable(),
-        phone: z.string().trim().max(80).optional().nullable(),
-        email: z.string().trim().email().max(200).optional().nullable(),
-        notes: z.string().trim().max(500).optional().nullable(),
-      })
-      .parse(req.body);
+    const body = supplierBodySchema.parse(req.body);
     res.status(201).json(await createSupplier(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.patch("/operations/suppliers/:id", async (req, res, next) => {
+  try {
+    const params = z.object({ id: z.string().trim().min(1) }).parse(req.params);
+    const body = supplierBodySchema
+      .partial()
+      .extend({ isActive: z.boolean().optional() })
+      .parse(req.body);
+    res.json(await updateSupplier(params.id, body));
   } catch (error) {
     next(error);
   }
@@ -233,15 +273,18 @@ manageRouter.post(
 
 manageRouter.post("/operations/members", async (req, res, next) => {
   try {
-    const body = z
-      .object({
-        name: z.string().trim().max(120).optional().nullable(),
-        phone: z.string().trim().min(3).max(80),
-        email: z.string().trim().email().max(200).optional().nullable(),
-        points: z.number().int().min(0).max(999999).optional(),
-      })
-      .parse(req.body);
+    const body = memberBodySchema.parse(req.body);
     res.status(201).json(await createMember(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.patch("/operations/members/:id", async (req, res, next) => {
+  try {
+    const params = z.object({ id: z.string().trim().min(1) }).parse(req.params);
+    const body = memberBodySchema.partial().parse(req.body);
+    res.json(await updateMember(params.id, body));
   } catch (error) {
     next(error);
   }
@@ -249,17 +292,18 @@ manageRouter.post("/operations/members", async (req, res, next) => {
 
 manageRouter.post("/operations/coupons", async (req, res, next) => {
   try {
-    const body = z
-      .object({
-        code: z.string().trim().min(2).max(40),
-        discountType: z.enum(["PERCENT", "AMOUNT"]),
-        discountValue: z.number().int().min(1).max(999999),
-        isActive: z.boolean().default(true),
-        startsAt: z.string().datetime().optional().nullable(),
-        endsAt: z.string().datetime().optional().nullable(),
-      })
-      .parse(req.body);
+    const body = couponBodySchema.parse(req.body);
     res.status(201).json(await createCoupon(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.patch("/operations/coupons/:id", async (req, res, next) => {
+  try {
+    const params = z.object({ id: z.string().trim().min(1) }).parse(req.params);
+    const body = couponBodySchema.partial().parse(req.body);
+    res.json(await updateCoupon(params.id, body));
   } catch (error) {
     next(error);
   }
@@ -267,15 +311,18 @@ manageRouter.post("/operations/coupons", async (req, res, next) => {
 
 manageRouter.post("/operations/kds-devices", async (req, res, next) => {
   try {
-    const body = z
-      .object({
-        name: z.string().trim().min(1).max(120),
-        station: z.string().trim().max(80).optional().nullable(),
-        token: z.string().trim().max(160).optional(),
-        isActive: z.boolean().default(true),
-      })
-      .parse(req.body);
+    const body = kdsDeviceBodySchema.parse(req.body);
     res.status(201).json(await createKdsDevice(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.patch("/operations/kds-devices/:id", async (req, res, next) => {
+  try {
+    const params = z.object({ id: z.string().trim().min(1) }).parse(req.params);
+    const body = kdsDeviceBodySchema.partial().parse(req.body);
+    res.json(await updateKdsDevice(params.id, body));
   } catch (error) {
     next(error);
   }
