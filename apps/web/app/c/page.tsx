@@ -44,6 +44,11 @@ const labels = {
     note: "Kitchen note",
     language: "Language",
     openTotal: "Open total",
+    customize: "Customize",
+    hideOptions: "Hide options",
+    viewStatus: "View table status",
+    menu: "Menu",
+    tableSummary: "Table summary",
     soldOut: "Sold out",
     unavailable: "Unavailable",
     available: "Available",
@@ -66,6 +71,11 @@ const labels = {
     note: "Note cuisine",
     language: "Langue",
     openTotal: "Total ouvert",
+    customize: "Options",
+    hideOptions: "Masquer",
+    viewStatus: "Voir la table",
+    menu: "Menu",
+    tableSummary: "Resume de table",
     soldOut: "Epuise",
     unavailable: "Indisponible",
     available: "Disponible",
@@ -88,6 +98,11 @@ const labels = {
     note: "口味备注",
     language: "语言",
     openTotal: "未结金额",
+    customize: "选择口味",
+    hideOptions: "收起选项",
+    viewStatus: "查看桌台状态",
+    menu: "菜单",
+    tableSummary: "桌台概览",
     soldOut: "售罄",
     unavailable: "不可售",
     available: "可点",
@@ -160,6 +175,9 @@ function CustomerExperience() {
   const [query, setQuery] = useState("");
   const [modifierDrafts, setModifierDrafts] = useState<
     Record<string, Record<string, string[]>>
+  >({});
+  const [expandedOptions, setExpandedOptions] = useState<
+    Record<string, boolean>
   >({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
@@ -273,7 +291,7 @@ function CustomerExperience() {
   }
 
   function addToCart(item: MenuItem) {
-    if (item.isSoldOut) return;
+    if (item.isSoldOut || !item.isAvailable) return;
     const modifiers = selectedModifiers(item);
     const note = notes[item.id]?.trim() ?? "";
     const unitPrice =
@@ -317,6 +335,18 @@ function CustomerExperience() {
     0,
   );
   const totalQuantity = cart.reduce((sum, line) => sum + line.quantity, 0);
+  const activeOrderCount =
+    orders?.orders.filter((order) => order.status === "SUBMITTED").length ?? 0;
+  const pendingRequestCount =
+    orders?.serviceRequests.filter((request) => request.status === "PENDING")
+      .length ?? 0;
+
+  function toggleOptions(itemId: string) {
+    setExpandedOptions((current) => ({
+      ...current,
+      [itemId]: !current[itemId],
+    }));
+  }
 
   async function submitOrder() {
     if (!qrToken || cart.length === 0) return;
@@ -399,206 +429,95 @@ function CustomerExperience() {
   }
 
   return (
-    <main className="page">
-      <section className="page-header">
-        <h1>{menu?.store.name ?? "Customer menu"}</h1>
-        <p>
-          {menu
-            ? `Table ${menu.table.number}. Add items, send the order, or call staff.`
-            : "Loading menu..."}
-        </p>
-      </section>
-
-      <section className="card grid">
-        <div className="row between">
-          <label className="field" style={{ flex: 1, minWidth: 220 }}>
-            <span>{t.search}</span>
-            <input
-              className="input"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Noodles, dumplings, tea"
-            />
-          </label>
-          <label className="field">
-            <span>{t.language}</span>
-            <select
-              className="select"
-              value={language}
-              onChange={(event) =>
-                setLanguage(event.target.value as LanguageCode)
-              }
-            >
-              <option value="en">English</option>
-              <option value="fr-CA">Francais</option>
-              <option value="zh-CN">中文</option>
-            </select>
-          </label>
-          <div className="row" aria-label="Service requests">
-            <button
-              className="btn ghost"
-              onClick={() => void sendServiceRequest("WATER")}
-            >
-              {t.water}
-            </button>
-            <button
-              className="btn ghost"
-              onClick={() => void sendServiceRequest("CALL_STAFF")}
-            >
-              {t.callStaff}
-            </button>
-            <button
-              className="btn ghost"
-              onClick={() => void sendServiceRequest("FOLLOW_UP")}
-            >
-              {t.followUp}
-            </button>
-          </div>
+    <main className="page customer-page">
+      <section className="page-header customer-header">
+        <div>
+          <span className="meta">
+            {menu ? `Table ${menu.table.number}` : "Dine-in"}
+          </span>
+          <h1>{menu?.store.name ?? "Customer menu"}</h1>
+          <p>
+            {menu
+              ? "Browse the menu first. Your table status is below the menu."
+              : "Loading menu..."}
+          </p>
         </div>
-        {notice ? <div className="success card">{notice}</div> : null}
-        {error ? <div className="error card">{error}</div> : null}
+        {orders ? (
+          <div className="customer-total-pill">
+            <span>{t.openTotal}</span>
+            <strong>
+              {formatCents(
+                orders.openTotals.totalCents,
+                orders.store.currency,
+                orders.store.locale,
+              )}
+            </strong>
+          </div>
+        ) : null}
       </section>
 
-      {orders ? (
-        <section className="grid two order-status-grid">
-          <article className="card grid">
-            <div className="row between">
-              <h2>{t.tableStatus}</h2>
-              <button
-                className="btn ghost"
-                onClick={() => void refreshOrders()}
-                disabled={loading}
-              >
-                {t.refresh}
-              </button>
-            </div>
-            <div className="row between">
-              <span className="meta">{t.openTotal}</span>
-              <strong>
-                {formatCents(
-                  orders.openTotals.totalCents,
-                  orders.store.currency,
-                  orders.store.locale,
-                )}
-              </strong>
-            </div>
-            {orders.openTotals.taxLines.length > 0 ? (
-              <div className="list compact-list">
-                {orders.openTotals.taxLines.map((line) => (
-                  <div className="row between" key={line.label}>
-                    <span className="meta">{line.label}</span>
-                    <span className="meta">
-                      {formatCents(
-                        line.amountCents,
-                        orders.store.currency,
-                        orders.store.locale,
-                      )}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </article>
+      <section className="card grid customer-controls">
+        <label className="field customer-search">
+          <span>{t.search}</span>
+          <input
+            className="input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Noodles, dumplings, tea"
+          />
+        </label>
+        <label className="field customer-language">
+          <span>{t.language}</span>
+          <select
+            className="select"
+            value={language}
+            onChange={(event) =>
+              setLanguage(event.target.value as LanguageCode)
+            }
+          >
+            <option value="en">English</option>
+            <option value="fr-CA">Francais</option>
+            <option value="zh-CN">中文</option>
+          </select>
+        </label>
+        <div
+          className="row customer-service-actions"
+          aria-label="Service requests"
+        >
+          <button
+            className="btn ghost"
+            onClick={() => void sendServiceRequest("WATER")}
+          >
+            {t.water}
+          </button>
+          <button
+            className="btn ghost"
+            onClick={() => void sendServiceRequest("CALL_STAFF")}
+          >
+            {t.callStaff}
+          </button>
+          <button
+            className="btn ghost"
+            onClick={() => void sendServiceRequest("FOLLOW_UP")}
+          >
+            {t.followUp}
+          </button>
+        </div>
+        {notice ? (
+          <div className="success card customer-message">{notice}</div>
+        ) : null}
+        {error ? (
+          <div className="error card customer-message">{error}</div>
+        ) : null}
+      </section>
 
-          <article className="card grid">
-            <h2>{t.serviceRequests}</h2>
-            <div className="list">
-              {orders.serviceRequests.slice(0, 4).map((request) => (
-                <div className="list-item row between" key={request.id}>
-                  <span>{requestTypeLabel(request.type, language)}</span>
-                  <span
-                    className={`status ${
-                      request.status === "PENDING"
-                        ? "checkout"
-                        : request.status === "HANDLED"
-                          ? "ok"
-                          : ""
-                    }`}
-                  >
-                    {requestStatusLabel(request.status)}
-                  </span>
-                </div>
-              ))}
-              {orders.serviceRequests.length === 0 ? (
-                <span className="meta">No service requests yet.</span>
-              ) : null}
-            </div>
-          </article>
-
-          <article className="card grid order-history">
-            <h2>{t.orders}</h2>
-            <div className="list">
-              {orders.orders.map((order) => (
-                <div className="list-item order-card" key={order.id}>
-                  <div className="row between">
-                    <strong>Order {order.id.slice(0, 8)}</strong>
-                    <span
-                      className={`status ${
-                        order.status === "SUBMITTED"
-                          ? "checkout"
-                          : order.status === "CLOSED"
-                            ? "ok"
-                            : "urgent"
-                      }`}
-                    >
-                      {orderStatusLabel(order.status)}
-                    </span>
-                  </div>
-                  <div className="list compact-list">
-                    {order.items.map((item) => (
-                      <div className="grid compact-list" key={item.id}>
-                        <div className="row between">
-                          <span>
-                            {item.quantity}x {item.nameSnapshot}
-                          </span>
-                          <span
-                            className={`status ${
-                              item.status === "PENDING"
-                                ? "checkout"
-                                : item.status === "DONE"
-                                  ? "ok"
-                                  : "urgent"
-                            }`}
-                          >
-                            {itemStatusLabel(item.status)}
-                          </span>
-                        </div>
-                        {item.modifiers.length > 0 ? (
-                          <span className="meta">
-                            {item.modifiers.map(modifierName).join(" / ")}
-                          </span>
-                        ) : null}
-                        {item.note ? (
-                          <span className="meta">{item.note}</span>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="row between">
-                    <span className="meta">Total</span>
-                    <strong>
-                      {formatCents(
-                        order.totals.totalCents,
-                        orders.store.currency,
-                        orders.store.locale,
-                      )}
-                    </strong>
-                  </div>
-                </div>
-              ))}
-              {orders.orders.length === 0 ? (
-                <span className="meta">No orders yet.</span>
-              ) : null}
-            </div>
-          </article>
-        </section>
-      ) : null}
-
-      <section className="grid" style={{ marginTop: 16 }}>
+      <section className="grid customer-menu-grid" id="menu">
         {filteredCategories.map((category) => (
           <div className="card" key={category.id}>
             <div className="row between">
-              <h2>{category.name}</h2>
+              <h2>
+                {t.menu} / {category.name}
+              </h2>
               <span className="meta">{category.items.length} items</span>
             </div>
             <div className="list">
@@ -618,6 +537,11 @@ function CustomerExperience() {
                   (sum, modifier) => sum + modifier.priceDeltaCents,
                   0,
                 );
+                const isExpanded = expandedOptions[item.id] ?? false;
+                const note = notes[item.id]?.trim() ?? "";
+                const itemQuantityInCart = cart
+                  .filter((line) => line.menuItemId === item.id)
+                  .reduce((sum, line) => sum + line.quantity, 0);
                 return (
                   <div
                     className={`list-item menu-item ${item.isSoldOut ? "muted-item" : ""}`}
@@ -662,124 +586,159 @@ function CustomerExperience() {
                         ) : null}
                       </div>
 
-                      {item.modifierGroups.length > 0 ? (
-                        <div className="modifier-grid">
-                          {item.modifierGroups.map((group) => (
-                            <fieldset className="modifier-group" key={group.id}>
-                              <legend>
-                                {localized(
-                                  group.name,
-                                  group.nameLocalized,
-                                  language,
-                                )}
-                              </legend>
-                              {group.maxSelect <= 1 ? (
-                                <select
-                                  className="select"
-                                  value={
-                                    (modifierDrafts[item.id]?.[group.id] ??
-                                      group.options
-                                        .filter((option) => option.isDefault)
-                                        .map((option) => option.id))[0] ?? ""
-                                  }
-                                  onChange={(event) =>
-                                    updateModifier(
-                                      item,
-                                      group.id,
-                                      event.target.value,
-                                    )
-                                  }
+                      {modifiers.length > 0 ? (
+                        <span className="meta selected-options">
+                          {modifiers.map(modifierName).join(" / ")}
+                        </span>
+                      ) : null}
+                      {note ? <span className="meta">{note}</span> : null}
+
+                      {isExpanded ? (
+                        <div className="menu-item-options">
+                          {item.modifierGroups.length > 0 ? (
+                            <div className="modifier-grid">
+                              {item.modifierGroups.map((group) => (
+                                <fieldset
+                                  className="modifier-group"
+                                  key={group.id}
                                 >
-                                  {!group.required ? (
-                                    <option value="">None</option>
-                                  ) : null}
-                                  {group.options.map((option) => (
-                                    <option value={option.id} key={option.id}>
-                                      {localized(
-                                        option.name,
-                                        option.nameLocalized,
-                                        language,
-                                      )}
-                                      {option.priceDeltaCents
-                                        ? ` ${formatCents(
-                                            option.priceDeltaCents,
-                                            menu?.store.currency,
-                                            menu?.store.locale,
-                                          )}`
-                                        : ""}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <div className="row">
-                                  {group.options.map((option) => {
-                                    const checked = (
-                                      modifierDrafts[item.id]?.[group.id] ?? []
-                                    ).includes(option.id);
-                                    return (
-                                      <label
-                                        className="mini-check"
-                                        key={option.id}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={checked}
-                                          onChange={(event) =>
-                                            updateModifier(
-                                              item,
-                                              group.id,
-                                              option.id,
-                                              event.target.checked,
+                                  <legend>
+                                    {localized(
+                                      group.name,
+                                      group.nameLocalized,
+                                      language,
+                                    )}
+                                  </legend>
+                                  {group.maxSelect <= 1 ? (
+                                    <select
+                                      className="select"
+                                      value={
+                                        (modifierDrafts[item.id]?.[group.id] ??
+                                          group.options
+                                            .filter(
+                                              (option) => option.isDefault,
                                             )
-                                          }
-                                        />
-                                        <span>
+                                            .map((option) => option.id))[0] ??
+                                        ""
+                                      }
+                                      onChange={(event) =>
+                                        updateModifier(
+                                          item,
+                                          group.id,
+                                          event.target.value,
+                                        )
+                                      }
+                                    >
+                                      {!group.required ? (
+                                        <option value="">None</option>
+                                      ) : null}
+                                      {group.options.map((option) => (
+                                        <option
+                                          value={option.id}
+                                          key={option.id}
+                                        >
                                           {localized(
                                             option.name,
                                             option.nameLocalized,
                                             language,
                                           )}
-                                        </span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </fieldset>
-                          ))}
+                                          {option.priceDeltaCents
+                                            ? ` ${formatCents(
+                                                option.priceDeltaCents,
+                                                menu?.store.currency,
+                                                menu?.store.locale,
+                                              )}`
+                                            : ""}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <div className="row">
+                                      {group.options.map((option) => {
+                                        const selectedIds =
+                                          modifierDrafts[item.id]?.[group.id] ??
+                                          group.options
+                                            .filter((entry) => entry.isDefault)
+                                            .map((entry) => entry.id);
+                                        const checked = selectedIds.includes(
+                                          option.id,
+                                        );
+                                        return (
+                                          <label
+                                            className="mini-check"
+                                            key={option.id}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={checked}
+                                              onChange={(event) =>
+                                                updateModifier(
+                                                  item,
+                                                  group.id,
+                                                  option.id,
+                                                  event.target.checked,
+                                                )
+                                              }
+                                            />
+                                            <span>
+                                              {localized(
+                                                option.name,
+                                                option.nameLocalized,
+                                                language,
+                                              )}
+                                            </span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </fieldset>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          <label className="field">
+                            <span>{t.note}</span>
+                            <input
+                              className="input"
+                              value={notes[item.id] ?? ""}
+                              maxLength={200}
+                              onChange={(event) =>
+                                setNotes((current) => ({
+                                  ...current,
+                                  [item.id]: event.target.value,
+                                }))
+                              }
+                            />
+                          </label>
                         </div>
                       ) : null}
-
-                      <label className="field">
-                        <span>{t.note}</span>
-                        <input
-                          className="input"
-                          value={notes[item.id] ?? ""}
-                          maxLength={200}
-                          onChange={(event) =>
-                            setNotes((current) => ({
-                              ...current,
-                              [item.id]: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
                     </div>
-                    <button
-                      className="btn"
-                      onClick={() => addToCart(item)}
-                      disabled={
-                        item.isSoldOut ||
-                        (item.stockQuantity !== null &&
-                          item.stockQuantity !== undefined &&
-                          (cart
-                            .filter((line) => line.menuItemId === item.id)
-                            .reduce((sum, line) => sum + line.quantity, 0) ??
-                            0) >= item.stockQuantity)
-                      }
-                    >
-                      {item.isSoldOut ? t.soldOut : t.add}
-                    </button>
+                    <div className="menu-item-actions">
+                      <button
+                        className="btn ghost"
+                        onClick={() => toggleOptions(item.id)}
+                      >
+                        {isExpanded ? t.hideOptions : t.customize}
+                      </button>
+                      <button
+                        className="btn primary"
+                        onClick={() => addToCart(item)}
+                        disabled={
+                          item.isSoldOut ||
+                          !item.isAvailable ||
+                          (item.stockQuantity !== null &&
+                            item.stockQuantity !== undefined &&
+                            itemQuantityInCart >= item.stockQuantity)
+                        }
+                      >
+                        {item.isSoldOut
+                          ? t.soldOut
+                          : item.isAvailable
+                            ? t.add
+                            : t.unavailable}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -787,6 +746,162 @@ function CustomerExperience() {
           </div>
         ))}
       </section>
+
+      {orders ? (
+        <details
+          className="customer-status-panel"
+          open={activeOrderCount > 0 || pendingRequestCount > 0}
+        >
+          <summary>
+            <span>
+              <strong>{t.viewStatus}</strong>
+              <span className="meta">
+                {activeOrderCount} open / {pendingRequestCount} request
+              </span>
+            </span>
+            <span className="status">
+              {formatCents(
+                orders.openTotals.totalCents,
+                orders.store.currency,
+                orders.store.locale,
+              )}
+            </span>
+          </summary>
+
+          <section className="grid two order-status-grid">
+            <article className="card grid">
+              <div className="row between">
+                <h2>{t.tableStatus}</h2>
+                <button
+                  className="btn ghost"
+                  onClick={() => void refreshOrders()}
+                  disabled={loading}
+                >
+                  {t.refresh}
+                </button>
+              </div>
+              <div className="row between">
+                <span className="meta">{t.openTotal}</span>
+                <strong>
+                  {formatCents(
+                    orders.openTotals.totalCents,
+                    orders.store.currency,
+                    orders.store.locale,
+                  )}
+                </strong>
+              </div>
+              {orders.openTotals.taxLines.length > 0 ? (
+                <div className="list compact-list">
+                  {orders.openTotals.taxLines.map((line) => (
+                    <div className="row between" key={line.label}>
+                      <span className="meta">{line.label}</span>
+                      <span className="meta">
+                        {formatCents(
+                          line.amountCents,
+                          orders.store.currency,
+                          orders.store.locale,
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </article>
+
+            <article className="card grid">
+              <h2>{t.serviceRequests}</h2>
+              <div className="list">
+                {orders.serviceRequests.slice(0, 4).map((request) => (
+                  <div className="list-item row between" key={request.id}>
+                    <span>{requestTypeLabel(request.type, language)}</span>
+                    <span
+                      className={`status ${
+                        request.status === "PENDING"
+                          ? "checkout"
+                          : request.status === "HANDLED"
+                            ? "ok"
+                            : ""
+                      }`}
+                    >
+                      {requestStatusLabel(request.status)}
+                    </span>
+                  </div>
+                ))}
+                {orders.serviceRequests.length === 0 ? (
+                  <span className="meta">No service requests yet.</span>
+                ) : null}
+              </div>
+            </article>
+
+            <article className="card grid order-history">
+              <h2>{t.orders}</h2>
+              <div className="list">
+                {orders.orders.map((order) => (
+                  <div className="list-item order-card" key={order.id}>
+                    <div className="row between">
+                      <strong>Order {order.id.slice(0, 8)}</strong>
+                      <span
+                        className={`status ${
+                          order.status === "SUBMITTED"
+                            ? "checkout"
+                            : order.status === "CLOSED"
+                              ? "ok"
+                              : "urgent"
+                        }`}
+                      >
+                        {orderStatusLabel(order.status)}
+                      </span>
+                    </div>
+                    <div className="list compact-list">
+                      {order.items.map((item) => (
+                        <div className="grid compact-list" key={item.id}>
+                          <div className="row between">
+                            <span>
+                              {item.quantity}x {item.nameSnapshot}
+                            </span>
+                            <span
+                              className={`status ${
+                                item.status === "PENDING"
+                                  ? "checkout"
+                                  : item.status === "DONE"
+                                    ? "ok"
+                                    : "urgent"
+                              }`}
+                            >
+                              {itemStatusLabel(item.status)}
+                            </span>
+                          </div>
+                          {item.modifiers.length > 0 ? (
+                            <span className="meta">
+                              {item.modifiers.map(modifierName).join(" / ")}
+                            </span>
+                          ) : null}
+                          {item.note ? (
+                            <span className="meta">{item.note}</span>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="row between">
+                      <span className="meta">Total</span>
+                      <strong>
+                        {formatCents(
+                          order.totals.totalCents,
+                          orders.store.currency,
+                          orders.store.locale,
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+                ))}
+                {orders.orders.length === 0 ? (
+                  <span className="meta">No orders yet.</span>
+                ) : null}
+              </div>
+            </article>
+          </section>
+        </details>
+      ) : null}
 
       {cart.length > 0 ? (
         <div className="cart-bar">

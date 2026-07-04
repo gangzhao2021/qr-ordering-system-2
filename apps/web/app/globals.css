@@ -44,6 +44,15 @@ textarea {
   min-height: 100vh;
 }
 
+.customer-shell .topbar-inner {
+  justify-content: center;
+}
+
+.customer-shell .brand {
+  justify-items: center;
+  text-align: center;
+}
+
 .topbar {
   position: sticky;
   top: 0;
@@ -123,6 +132,10 @@ textarea {
   padding: 24px 20px 48px;
 }
 
+.customer-page {
+  padding-bottom: 120px;
+}
+
 .page-header {
   display: grid;
   gap: 8px;
@@ -140,6 +153,34 @@ textarea {
   color: var(--muted);
   max-width: 720px;
   line-height: 1.6;
+}
+
+.customer-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.customer-total-pill {
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px 14px;
+  text-align: right;
+}
+
+.customer-total-pill span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.customer-total-pill strong {
+  font-size: 18px;
 }
 
 .grid {
@@ -284,6 +325,76 @@ textarea {
 
 .order-status-grid {
   margin-top: 16px;
+}
+
+.customer-controls {
+  grid-template-columns: minmax(180px, 1fr) minmax(132px, 0.42fr);
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.customer-service-actions {
+  grid-column: 1 / -1;
+}
+
+.customer-service-actions .btn {
+  flex: 1 1 132px;
+}
+
+.customer-message {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+}
+
+.customer-menu-grid {
+  margin-top: 16px;
+}
+
+.selected-options {
+  display: block;
+}
+
+.menu-item-options {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.menu-item-actions {
+  display: grid;
+  gap: 8px;
+  min-width: 104px;
+}
+
+.menu-item-actions .btn {
+  width: 100%;
+}
+
+.customer-status-panel {
+  margin-top: 18px;
+}
+
+.customer-status-panel > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.customer-status-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.customer-status-panel > summary span:first-child {
+  display: grid;
+  gap: 4px;
 }
 
 .order-history {
@@ -664,6 +775,23 @@ textarea {
     justify-content: flex-start;
   }
 
+  .customer-shell .topbar-inner {
+    align-items: center;
+  }
+
+  .customer-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .customer-total-pill {
+    text-align: left;
+  }
+
+  .customer-controls {
+    grid-template-columns: 1fr;
+  }
+
   .menu-item,
   .menu-item-summary,
   .inventory-controls,
@@ -678,6 +806,15 @@ textarea {
   .bar-row,
   .qr-preview {
     grid-template-columns: 1fr;
+  }
+
+  .menu-item-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-status-panel > summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
