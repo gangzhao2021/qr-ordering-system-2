@@ -1,7 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import type { ManageMenuResponse, MenuCategory, MenuItem } from "@qr2/shared";
+import type {
+  ManageMenuResponse,
+  MenuCategory,
+  MenuItem,
+  MenuModifierGroup,
+} from "@qr2/shared";
 import { formatCents } from "@qr2/shared";
 import { apiFetch } from "../../../lib/api";
 import {
@@ -13,6 +18,26 @@ import {
 type CategoryDraft = {
   name: string;
   sortOrder: string;
+};
+
+type ModifierOptionDraft = {
+  id: string;
+  name: string;
+  nameFr: string;
+  nameZh: string;
+  priceDelta: string;
+  isDefault: boolean;
+};
+
+type ModifierGroupDraft = {
+  id: string;
+  name: string;
+  nameFr: string;
+  nameZh: string;
+  required: boolean;
+  minSelect: string;
+  maxSelect: string;
+  options: ModifierOptionDraft[];
 };
 
 type MenuItemDraft = {
@@ -28,7 +53,7 @@ type MenuItemDraft = {
   spiceLevel: string;
   taxCategory: string;
   kitchenStation: string;
-  modifierGroupsJson: string;
+  modifierGroups: ModifierGroupDraft[];
   price: string;
   isAvailable: boolean;
   stockQuantity: string;
@@ -48,6 +73,102 @@ function parseOptionalStock(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
   return Number(trimmed);
+}
+
+function defaultModifierOption(index = 1): ModifierOptionDraft {
+  return {
+    id: `option-${index}`,
+    name: `Option ${index}`,
+    nameFr: "",
+    nameZh: "",
+    priceDelta: "0.00",
+    isDefault: index === 1,
+  };
+}
+
+function defaultModifierGroup(index = 1): ModifierGroupDraft {
+  return {
+    id: `group-${index}`,
+    name: `Group ${index}`,
+    nameFr: "",
+    nameZh: "",
+    required: false,
+    minSelect: "0",
+    maxSelect: "1",
+    options: [defaultModifierOption()],
+  };
+}
+
+function modifierGroupDrafts(
+  groups: MenuModifierGroup[],
+): ModifierGroupDraft[] {
+  return groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    nameFr: group.nameLocalized?.["fr-CA"] ?? "",
+    nameZh: group.nameLocalized?.["zh-CN"] ?? "",
+    required: group.required,
+    minSelect: String(group.minSelect),
+    maxSelect: String(group.maxSelect),
+    options: group.options.map((option) => ({
+      id: option.id,
+      name: option.name,
+      nameFr: option.nameLocalized?.["fr-CA"] ?? "",
+      nameZh: option.nameLocalized?.["zh-CN"] ?? "",
+      priceDelta: dollarsFromCents(option.priceDeltaCents),
+      isDefault: option.isDefault === true,
+    })),
+  }));
+}
+
+function modifierGroupsFromDraft(
+  groups: ModifierGroupDraft[],
+): MenuModifierGroup[] {
+  const result: MenuModifierGroup[] = [];
+
+  for (const group of groups) {
+    const parsedMaxSelect = Math.round(Number(group.maxSelect || 1));
+    const maxSelect = Number.isFinite(parsedMaxSelect)
+      ? Math.max(1, parsedMaxSelect)
+      : 1;
+    const parsedMinSelect = Math.round(Number(group.minSelect || 0));
+    const rawMinSelect = Number.isFinite(parsedMinSelect) ? parsedMinSelect : 0;
+    const minSelect = Math.max(
+      group.required ? 1 : 0,
+      Math.min(maxSelect, rawMinSelect),
+    );
+    const options = group.options
+      .filter((option) => option.id.trim() && option.name.trim())
+      .map((option) => ({
+        id: option.id.trim(),
+        name: option.name.trim(),
+        nameLocalized: {
+          "fr-CA": option.nameFr.trim() || null,
+          "zh-CN": option.nameZh.trim() || null,
+        },
+        priceDeltaCents: parsePriceCents(option.priceDelta),
+        ...(option.isDefault ? { isDefault: true } : {}),
+      }));
+
+    if (!group.id.trim() || !group.name.trim() || options.length === 0) {
+      continue;
+    }
+
+    result.push({
+      id: group.id.trim(),
+      name: group.name.trim(),
+      nameLocalized: {
+        "fr-CA": group.nameFr.trim() || null,
+        "zh-CN": group.nameZh.trim() || null,
+      },
+      required: group.required || minSelect > 0,
+      minSelect,
+      maxSelect,
+      options,
+    });
+  }
+
+  return result;
 }
 
 function draftFromCategory(category: MenuCategory): CategoryDraft {
@@ -71,7 +192,7 @@ function draftFromItem(item: MenuItem): MenuItemDraft {
     spiceLevel: String(item.spiceLevel),
     taxCategory: item.taxCategory,
     kitchenStation: item.kitchenStation,
-    modifierGroupsJson: JSON.stringify(item.modifierGroups, null, 2),
+    modifierGroups: modifierGroupDrafts(item.modifierGroups),
     price: dollarsFromCents(item.priceCents),
     isAvailable: item.isAvailable,
     stockQuantity:
@@ -99,6 +220,296 @@ function statusClass(item: MenuItem) {
   return "ok";
 }
 
+type ModifierGroupsEditorProps = {
+  groups: ModifierGroupDraft[];
+  onChange: (groups: ModifierGroupDraft[]) => void;
+};
+
+function ModifierGroupsEditor({ groups, onChange }: ModifierGroupsEditorProps) {
+  function updateGroup(index: number, patch: Partial<ModifierGroupDraft>) {
+    onChange(
+      groups.map((group, groupIndex) =>
+        groupIndex === index ? { ...group, ...patch } : group,
+      ),
+    );
+  }
+
+  function addGroup() {
+    onChange([...groups, defaultModifierGroup(groups.length + 1)]);
+  }
+
+  function removeGroup(index: number) {
+    onChange(groups.filter((_, groupIndex) => groupIndex !== index));
+  }
+
+  function updateOption(
+    groupIndex: number,
+    optionIndex: number,
+    patch: Partial<ModifierOptionDraft>,
+  ) {
+    onChange(
+      groups.map((group, currentGroupIndex) =>
+        currentGroupIndex === groupIndex
+          ? {
+              ...group,
+              options: group.options.map((option, currentOptionIndex) =>
+                currentOptionIndex === optionIndex
+                  ? { ...option, ...patch }
+                  : option,
+              ),
+            }
+          : group,
+      ),
+    );
+  }
+
+  function addOption(groupIndex: number) {
+    const group = groups[groupIndex];
+    if (!group) return;
+    updateGroup(groupIndex, {
+      options: [
+        ...group.options,
+        defaultModifierOption(group.options.length + 1),
+      ],
+    });
+  }
+
+  function removeOption(groupIndex: number, optionIndex: number) {
+    const group = groups[groupIndex];
+    if (!group || group.options.length <= 1) return;
+    updateGroup(groupIndex, {
+      options: group.options.filter(
+        (_, currentOptionIndex) => currentOptionIndex !== optionIndex,
+      ),
+    });
+  }
+
+  return (
+    <section className="modifier-editor">
+      <div className="row between">
+        <div>
+          <h3>Modifier groups</h3>
+          <p className="meta">
+            Use this for size, spice, sauces, add-ons, and paid upgrades.
+          </p>
+        </div>
+        <button className="btn ghost" type="button" onClick={addGroup}>
+          Add group
+        </button>
+      </div>
+
+      {groups.length === 0 ? (
+        <div className="modifier-editor-empty">
+          No modifiers. Add a group when guests need choices.
+        </div>
+      ) : (
+        <div className="modifier-editor-list">
+          {groups.map((group, groupIndex) => (
+            <div
+              className="modifier-edit-group"
+              key={`${group.id}-${groupIndex}`}
+            >
+              <div className="modifier-group-controls">
+                <label className="field">
+                  <span>Group code</span>
+                  <input
+                    className="input"
+                    value={group.id}
+                    onChange={(event) =>
+                      updateGroup(groupIndex, { id: event.target.value })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Group name</span>
+                  <input
+                    className="input"
+                    value={group.name}
+                    onChange={(event) =>
+                      updateGroup(groupIndex, { name: event.target.value })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>French</span>
+                  <input
+                    className="input"
+                    value={group.nameFr}
+                    onChange={(event) =>
+                      updateGroup(groupIndex, { nameFr: event.target.value })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Chinese</span>
+                  <input
+                    className="input"
+                    value={group.nameZh}
+                    onChange={(event) =>
+                      updateGroup(groupIndex, { nameZh: event.target.value })
+                    }
+                  />
+                </label>
+                <label className="mini-check modifier-required-check">
+                  <input
+                    type="checkbox"
+                    checked={group.required}
+                    onChange={(event) =>
+                      updateGroup(groupIndex, {
+                        required: event.target.checked,
+                        minSelect: event.target.checked
+                          ? group.minSelect === "0"
+                            ? "1"
+                            : group.minSelect
+                          : group.minSelect,
+                      })
+                    }
+                  />
+                  <span>Required</span>
+                </label>
+                <label className="field">
+                  <span>Min</span>
+                  <input
+                    className="input"
+                    inputMode="numeric"
+                    value={group.minSelect}
+                    onChange={(event) =>
+                      updateGroup(groupIndex, {
+                        minSelect: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Max</span>
+                  <input
+                    className="input"
+                    inputMode="numeric"
+                    value={group.maxSelect}
+                    onChange={(event) =>
+                      updateGroup(groupIndex, {
+                        maxSelect: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={() => removeGroup(groupIndex)}
+                >
+                  Remove
+                </button>
+              </div>
+
+              <div className="modifier-options">
+                <div className="row between">
+                  <strong>Options</strong>
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={() => addOption(groupIndex)}
+                  >
+                    Add option
+                  </button>
+                </div>
+                {group.options.map((option, optionIndex) => (
+                  <div
+                    className="modifier-option-row"
+                    key={`${option.id}-${optionIndex}`}
+                  >
+                    <label className="field">
+                      <span>Code</span>
+                      <input
+                        className="input"
+                        value={option.id}
+                        onChange={(event) =>
+                          updateOption(groupIndex, optionIndex, {
+                            id: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Name</span>
+                      <input
+                        className="input"
+                        value={option.name}
+                        onChange={(event) =>
+                          updateOption(groupIndex, optionIndex, {
+                            name: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>French</span>
+                      <input
+                        className="input"
+                        value={option.nameFr}
+                        onChange={(event) =>
+                          updateOption(groupIndex, optionIndex, {
+                            nameFr: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Chinese</span>
+                      <input
+                        className="input"
+                        value={option.nameZh}
+                        onChange={(event) =>
+                          updateOption(groupIndex, optionIndex, {
+                            nameZh: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Price +/-</span>
+                      <input
+                        className="input"
+                        inputMode="decimal"
+                        value={option.priceDelta}
+                        onChange={(event) =>
+                          updateOption(groupIndex, optionIndex, {
+                            priceDelta: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="mini-check modifier-default-check">
+                      <input
+                        type="checkbox"
+                        checked={option.isDefault}
+                        onChange={(event) =>
+                          updateOption(groupIndex, optionIndex, {
+                            isDefault: event.target.checked,
+                          })
+                        }
+                      />
+                      <span>Default</span>
+                    </label>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      onClick={() => removeOption(groupIndex, optionIndex)}
+                      disabled={group.options.length <= 1}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function ManageMenuPage() {
   const auth = useRequireRole(["DEV", "ADMIN"]);
   const [data, setData] = useState<ManageMenuResponse | null>(null);
@@ -122,7 +533,9 @@ export default function ManageMenuPage() {
   const [spiceLevel, setSpiceLevel] = useState("0");
   const [taxCategory, setTaxCategory] = useState("PREPARED_FOOD");
   const [kitchenStation, setKitchenStation] = useState("HOT");
-  const [modifierGroupsJson, setModifierGroupsJson] = useState("[]");
+  const [modifierGroups, setModifierGroups] = useState<ModifierGroupDraft[]>(
+    [],
+  );
   const [price, setPrice] = useState("12.00");
   const [stockQuantity, setStockQuantity] = useState("");
   const [lowStockThreshold, setLowStockThreshold] = useState("5");
@@ -190,7 +603,7 @@ export default function ManageMenuPage() {
         spiceLevel: "0",
         taxCategory: "PREPARED_FOOD",
         kitchenStation: "HOT",
-        modifierGroupsJson: "[]",
+        modifierGroups: [],
         price: "0.00",
         isAvailable: true,
         stockQuantity: "",
@@ -259,7 +672,6 @@ export default function ManageMenuPage() {
     event.preventDefault();
     setError(null);
     try {
-      const modifierGroups = JSON.parse(modifierGroupsJson || "[]");
       await apiFetch("/v1/manage/menu/items", {
         method: "POST",
         body: JSON.stringify({
@@ -282,7 +694,7 @@ export default function ManageMenuPage() {
           spiceLevel: Number(spiceLevel || 0),
           taxCategory,
           kitchenStation,
-          modifierGroups,
+          modifierGroups: modifierGroupsFromDraft(modifierGroups),
           priceCents: parsePriceCents(price),
           stockQuantity: parseOptionalStock(stockQuantity),
           lowStockThreshold: Number(lowStockThreshold || 0),
@@ -299,7 +711,7 @@ export default function ManageMenuPage() {
       setSpiceLevel("0");
       setTaxCategory("PREPARED_FOOD");
       setKitchenStation("HOT");
-      setModifierGroupsJson("[]");
+      setModifierGroups([]);
       setStockQuantity("");
       setLowStockThreshold("5");
       await refresh();
@@ -312,7 +724,6 @@ export default function ManageMenuPage() {
     const draft = itemDrafts[item.id] ?? draftFromItem(item);
     setError(null);
     try {
-      const modifierGroups = JSON.parse(draft.modifierGroupsJson || "[]");
       await apiFetch(`/v1/manage/menu/items/${item.id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -335,7 +746,7 @@ export default function ManageMenuPage() {
           spiceLevel: Number(draft.spiceLevel || 0),
           taxCategory: draft.taxCategory,
           kitchenStation: draft.kitchenStation,
-          modifierGroups,
+          modifierGroups: modifierGroupsFromDraft(draft.modifierGroups),
           priceCents: parsePriceCents(draft.price),
           isAvailable: draft.isAvailable,
           stockQuantity: parseOptionalStock(draft.stockQuantity),
@@ -533,14 +944,10 @@ export default function ManageMenuPage() {
                 onChange={(event) => setAllergens(event.target.value)}
               />
             </label>
-            <label className="field">
-              <span>Modifier groups JSON</span>
-              <textarea
-                className="input textarea mono"
-                value={modifierGroupsJson}
-                onChange={(event) => setModifierGroupsJson(event.target.value)}
-              />
-            </label>
+            <ModifierGroupsEditor
+              groups={modifierGroups}
+              onChange={setModifierGroups}
+            />
             <div className="grid two">
               <label className="field">
                 <span>Stock</span>
@@ -886,18 +1293,14 @@ export default function ManageMenuPage() {
                             />
                           </label>
                         </div>
-                        <label className="field">
-                          <span>Modifier groups JSON</span>
-                          <textarea
-                            className="input textarea mono"
-                            value={draft.modifierGroupsJson}
-                            onChange={(event) =>
-                              updateItemDraft(item.id, {
-                                modifierGroupsJson: event.target.value,
-                              })
-                            }
-                          />
-                        </label>
+                        <ModifierGroupsEditor
+                          groups={draft.modifierGroups}
+                          onChange={(nextGroups) =>
+                            updateItemDraft(item.id, {
+                              modifierGroups: nextGroups,
+                            })
+                          }
+                        />
 
                         <div className="row">
                           <button

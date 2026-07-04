@@ -856,6 +856,63 @@ textarea {
     repeat(4, minmax(104px, 0.8fr));
 }
 
+.modifier-editor {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.modifier-editor h3 {
+  margin: 0 0 4px;
+}
+
+.modifier-editor-empty {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.modifier-editor-list,
+.modifier-edit-group,
+.modifier-options {
+  display: grid;
+  gap: 10px;
+}
+
+.modifier-edit-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.modifier-group-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.modifier-required-check,
+.modifier-default-check {
+  align-self: end;
+  min-height: 40px;
+}
+
+.modifier-options {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.modifier-option-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
 .method-grid,
 .modifier-grid {
   display: grid;
@@ -1164,6 +1221,8 @@ textarea {
   .category-editor-controls,
   .menu-item-controls,
   .menu-item-controls.secondary,
+  .modifier-group-controls,
+  .modifier-option-row,
   .checkout-controls,
   .table-controls,
   .staff-controls,
