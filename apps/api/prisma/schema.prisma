@@ -109,6 +109,8 @@ model Store {
   purchaseOrders       PurchaseOrder[]
   inventoryAdjustments InventoryAdjustment[]
   stocktakes           Stocktake[]
+  ingredients          Ingredient[]
+  recipes              Recipe[]
   members              Member[]
   coupons              Coupon[]
   couponRedemptions    CouponRedemption[]
@@ -200,10 +202,62 @@ model MenuItem {
   inventoryAdjustments InventoryAdjustment[]
   purchaseOrderLines PurchaseOrderLine[]
   stocktakeLines StocktakeLine[]
+  recipe Recipe?
 
   @@index([storeId])
   @@index([categoryId])
   @@index([isAvailable])
+}
+
+model Ingredient {
+  id                String   @id @default(cuid())
+  storeId           String
+  name              String
+  unit              String   @default("unit")
+  stockQuantity     Int      @default(0)
+  unitCostCents     Int      @default(0)
+  lowStockThreshold Int      @default(0)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  recipeLines RecipeLine[]
+
+  @@index([storeId])
+  @@index([isActive])
+  @@unique([storeId, name])
+}
+
+model Recipe {
+  id            String   @id @default(cuid())
+  storeId       String
+  menuItemId    String
+  yieldQuantity Int      @default(1)
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  menuItem MenuItem  @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  lines    RecipeLine[]
+
+  @@index([storeId])
+  @@unique([menuItemId])
+}
+
+model RecipeLine {
+  id           String  @id @default(cuid())
+  recipeId     String
+  ingredientId String
+  quantity     Int
+  note         String?
+
+  recipe     Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@index([recipeId])
+  @@index([ingredientId])
 }
 
 model Order {

@@ -7,6 +7,7 @@ import type {
   Coupon,
   CreateCouponRequest,
   CreateDiningTableRequest,
+  CreateIngredientRequest,
   CreateInventoryAdjustmentRequest,
   CreateKdsDeviceRequest,
   CreateMemberRequest,
@@ -23,6 +24,7 @@ import type {
   FohPendingItem,
   FohTable,
   InventoryAdjustment,
+  Ingredient,
   KitchenPendingItem,
   KdsDevice,
   LanguageCode,
@@ -33,6 +35,7 @@ import type {
   Member,
   MenuCategory,
   MenuItem,
+  MenuRecipe,
   MenuModifierGroup,
   Order,
   OrderItem,
@@ -61,6 +64,7 @@ import type {
   TaxRule,
   UpdateDiningTableRequest,
   UpdateCouponRequest,
+  UpdateIngredientRequest,
   UpdateKdsDeviceRequest,
   UpdateMenuCategoryRequest,
   UpdateMenuItemInventoryRequest,
@@ -69,6 +73,7 @@ import type {
   UpdateStaffUserRequest,
   UpdateStoreSettingsRequest,
   UpdateSupplierRequest,
+  UpsertRecipeRequest,
 } from "@qr2/shared";
 import { STAFF_ROLES } from "@qr2/shared";
 import { hashPassword } from "./auth.js";
@@ -695,6 +700,91 @@ function mapStocktake(stocktake: {
       differenceQuantity: line.differenceQuantity,
       note: line.note,
     })),
+  };
+}
+
+function mapIngredient(ingredient: {
+  id: string;
+  name: string;
+  unit: string;
+  stockQuantity: number;
+  unitCostCents: number;
+  lowStockThreshold: number;
+  isActive: boolean;
+  createdAt: Date;
+}): Ingredient {
+  return {
+    id: ingredient.id,
+    name: ingredient.name,
+    unit: ingredient.unit,
+    stockQuantity: ingredient.stockQuantity,
+    unitCostCents: ingredient.unitCostCents,
+    lowStockThreshold: ingredient.lowStockThreshold,
+    isActive: ingredient.isActive,
+    isLowStock:
+      ingredient.stockQuantity > 0 &&
+      ingredient.stockQuantity <= ingredient.lowStockThreshold,
+    createdAt: toIso(ingredient.createdAt),
+  };
+}
+
+function mapRecipe(recipe: {
+  id: string;
+  menuItemId: string;
+  yieldQuantity: number;
+  note: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  menuItem: { name: string; priceCents: number };
+  lines: Array<{
+    id: string;
+    ingredientId: string;
+    quantity: number;
+    note: string | null;
+    ingredient: {
+      name: string;
+      unit: string;
+      unitCostCents: number;
+    };
+  }>;
+}): MenuRecipe {
+  const lines = recipe.lines.map((line) => {
+    const costCents = line.quantity * line.ingredient.unitCostCents;
+    return {
+      id: line.id,
+      ingredientId: line.ingredientId,
+      ingredientName: line.ingredient.name,
+      unit: line.ingredient.unit,
+      quantity: line.quantity,
+      unitCostCents: line.ingredient.unitCostCents,
+      costCents,
+      note: line.note,
+    };
+  });
+  const totalLineCostCents = lines.reduce(
+    (sum, line) => sum + line.costCents,
+    0,
+  );
+  const costCents = Math.round(
+    totalLineCostCents / Math.max(recipe.yieldQuantity, 1),
+  );
+  const marginCents = recipe.menuItem.priceCents - costCents;
+  return {
+    id: recipe.id,
+    menuItemId: recipe.menuItemId,
+    menuItemName: recipe.menuItem.name,
+    menuItemPriceCents: recipe.menuItem.priceCents,
+    yieldQuantity: recipe.yieldQuantity,
+    note: recipe.note,
+    costCents,
+    marginCents,
+    marginBps:
+      recipe.menuItem.priceCents > 0
+        ? Math.round((marginCents / recipe.menuItem.priceCents) * 10000)
+        : 0,
+    createdAt: toIso(recipe.createdAt),
+    updatedAt: toIso(recipe.updatedAt),
+    lines,
   };
 }
 
@@ -2379,6 +2469,8 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
     purchaseOrders,
     inventoryAdjustments,
     stocktakes,
+    ingredients,
+    recipes,
     members,
     memberPaymentStats,
     coupons,
@@ -2421,6 +2513,27 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
         lines: {
           orderBy: { id: "asc" },
           include: { menuItem: { select: { name: true } } },
+        },
+      },
+    }),
+    prisma.ingredient.findMany({
+      where: { storeId: store.id },
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      take: 200,
+    }),
+    prisma.recipe.findMany({
+      where: { storeId: store.id },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+      include: {
+        menuItem: { select: { name: true, priceCents: true } },
+        lines: {
+          orderBy: { id: "asc" },
+          include: {
+            ingredient: {
+              select: { name: true, unit: true, unitCostCents: true },
+            },
+          },
         },
       },
     }),
@@ -2479,6 +2592,8 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
     purchaseOrders: purchaseOrders.map(mapPurchaseOrder),
     inventoryAdjustments: inventoryAdjustments.map(mapInventoryAdjustment),
     stocktakes: stocktakes.map(mapStocktake),
+    ingredients: ingredients.map(mapIngredient),
+    recipes: recipes.map(mapRecipe),
     members: members.map((member) =>
       mapMember({ ...member, ...(memberStats.get(member.id) ?? {}) }),
     ),
@@ -3257,6 +3372,214 @@ export async function createStocktake(input: CreateStocktakeRequest) {
       },
     });
     return mapStocktake(saved);
+  });
+}
+
+export async function createIngredient(input: CreateIngredientRequest) {
+  const store = await getDefaultStore();
+  const name = input.name.trim();
+  return prisma.$transaction(async (tx) => {
+    const ingredient = await tx.ingredient.upsert({
+      where: {
+        storeId_name: {
+          storeId: store.id,
+          name,
+        },
+      },
+      update: {
+        unit: input.unit.trim() || "unit",
+        stockQuantity: input.stockQuantity,
+        unitCostCents: input.unitCostCents,
+        lowStockThreshold: input.lowStockThreshold,
+        isActive: input.isActive,
+      },
+      create: {
+        storeId: store.id,
+        name,
+        unit: input.unit.trim() || "unit",
+        stockQuantity: input.stockQuantity,
+        unitCostCents: input.unitCostCents,
+        lowStockThreshold: input.lowStockThreshold,
+        isActive: input.isActive,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        storeId: store.id,
+        action: "INGREDIENT_SAVED",
+        entityType: "Ingredient",
+        entityId: ingredient.id,
+        metadata: {
+          name: ingredient.name,
+          unit: ingredient.unit,
+          stockQuantity: ingredient.stockQuantity,
+          unitCostCents: ingredient.unitCostCents,
+        },
+      },
+    });
+    return mapIngredient(ingredient);
+  });
+}
+
+export async function updateIngredient(
+  ingredientId: string,
+  input: UpdateIngredientRequest,
+) {
+  const store = await getDefaultStore();
+  const existing = await prisma.ingredient.findFirst({
+    where: { id: ingredientId, storeId: store.id },
+  });
+  if (!existing) {
+    throw new HttpError(404, "INGREDIENT_NOT_FOUND", "Ingredient not found");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const ingredient = await tx.ingredient.update({
+      where: { id: existing.id },
+      data: {
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.unit !== undefined
+          ? { unit: input.unit.trim() || "unit" }
+          : {}),
+        ...(input.stockQuantity !== undefined
+          ? { stockQuantity: input.stockQuantity }
+          : {}),
+        ...(input.unitCostCents !== undefined
+          ? { unitCostCents: input.unitCostCents }
+          : {}),
+        ...(input.lowStockThreshold !== undefined
+          ? { lowStockThreshold: input.lowStockThreshold }
+          : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        storeId: store.id,
+        action: "INGREDIENT_UPDATED",
+        entityType: "Ingredient",
+        entityId: ingredient.id,
+        metadata: {
+          name: ingredient.name,
+          unit: ingredient.unit,
+          stockQuantity: ingredient.stockQuantity,
+          unitCostCents: ingredient.unitCostCents,
+        },
+      },
+    });
+    return mapIngredient(ingredient);
+  });
+}
+
+export async function upsertRecipe(input: UpsertRecipeRequest) {
+  const store = await getDefaultStore();
+  if (input.lines.length === 0) {
+    throw new HttpError(
+      400,
+      "EMPTY_RECIPE",
+      "Recipe must include at least one ingredient",
+    );
+  }
+
+  const ingredientIds = input.lines.map((line) => line.ingredientId.trim());
+  const uniqueIngredientIds = new Set(ingredientIds);
+  if (uniqueIngredientIds.size !== ingredientIds.length) {
+    throw new HttpError(
+      400,
+      "DUPLICATE_RECIPE_INGREDIENT",
+      "Recipe cannot include the same ingredient twice",
+    );
+  }
+
+  for (const line of input.lines) {
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
+      throw new HttpError(
+        400,
+        "INVALID_RECIPE_QUANTITY",
+        "Recipe ingredient quantity must be positive",
+      );
+    }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const [menuItem, ingredients] = await Promise.all([
+      tx.menuItem.findFirst({
+        where: { id: input.menuItemId, storeId: store.id },
+        select: { id: true },
+      }),
+      tx.ingredient.findMany({
+        where: {
+          storeId: store.id,
+          id: { in: Array.from(uniqueIngredientIds) },
+          isActive: true,
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (!menuItem) {
+      throw new HttpError(404, "MENU_ITEM_NOT_FOUND", "Menu item not found");
+    }
+    if (ingredients.length !== uniqueIngredientIds.size) {
+      throw new HttpError(
+        404,
+        "INGREDIENT_NOT_FOUND",
+        "Recipe ingredient not found",
+      );
+    }
+
+    const recipe = await tx.recipe.upsert({
+      where: { menuItemId: input.menuItemId },
+      update: {
+        yieldQuantity: input.yieldQuantity ?? 1,
+        note: input.note?.trim() || null,
+      },
+      create: {
+        storeId: store.id,
+        menuItemId: input.menuItemId,
+        yieldQuantity: input.yieldQuantity ?? 1,
+        note: input.note?.trim() || null,
+      },
+    });
+
+    await tx.recipeLine.deleteMany({ where: { recipeId: recipe.id } });
+    await tx.recipeLine.createMany({
+      data: input.lines.map((line) => ({
+        recipeId: recipe.id,
+        ingredientId: line.ingredientId.trim(),
+        quantity: line.quantity,
+        note: line.note?.trim() || null,
+      })),
+    });
+
+    const saved = await tx.recipe.findUniqueOrThrow({
+      where: { id: recipe.id },
+      include: {
+        menuItem: { select: { name: true, priceCents: true } },
+        lines: {
+          orderBy: { id: "asc" },
+          include: {
+            ingredient: {
+              select: { name: true, unit: true, unitCostCents: true },
+            },
+          },
+        },
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        storeId: store.id,
+        action: "RECIPE_SAVED",
+        entityType: "Recipe",
+        entityId: recipe.id,
+        metadata: {
+          menuItemId: saved.menuItemId,
+          menuItemName: saved.menuItem.name,
+          yieldQuantity: saved.yieldQuantity,
+          lineCount: saved.lines.length,
+        },
+      },
+    });
+    return mapRecipe(saved);
   });
 }
 

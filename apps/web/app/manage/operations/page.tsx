@@ -3,9 +3,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type {
   Coupon,
+  Ingredient,
   KdsDevice,
   ManageMenuResponse,
   ManageOperationsResponse,
+  MenuRecipe,
   Member,
   Supplier,
 } from "@qr2/shared";
@@ -44,6 +46,28 @@ type StocktakeForm = {
   note: string;
   countedAt: string;
   lines: StocktakeLineForm[];
+};
+
+type IngredientForm = {
+  name: string;
+  unit: string;
+  stockQuantity: string;
+  unitCostCents: string;
+  lowStockThreshold: string;
+  isActive: boolean;
+};
+
+type RecipeLineForm = {
+  ingredientId: string;
+  quantity: string;
+  note: string;
+};
+
+type RecipeForm = {
+  menuItemId: string;
+  yieldQuantity: string;
+  note: string;
+  lines: RecipeLineForm[];
 };
 
 type MemberForm = {
@@ -91,6 +115,22 @@ const initialStocktake: StocktakeForm = {
   note: "",
   countedAt: "",
   lines: [{ menuItemId: "", countedQuantity: "0", note: "" }],
+};
+
+const initialIngredient: IngredientForm = {
+  name: "",
+  unit: "unit",
+  stockQuantity: "0",
+  unitCostCents: "0",
+  lowStockThreshold: "0",
+  isActive: true,
+};
+
+const initialRecipe: RecipeForm = {
+  menuItemId: "",
+  yieldQuantity: "1",
+  note: "",
+  lines: [{ ingredientId: "", quantity: "1", note: "" }],
 };
 
 const initialMember: MemberForm = {
@@ -154,6 +194,10 @@ function stockLabel(value?: number | null) {
   return value === null || value === undefined ? "Untracked" : String(value);
 }
 
+function formatBps(value: number) {
+  return `${(value / 100).toFixed(1)}%`;
+}
+
 function supplierForm(entry: Supplier): SupplierForm {
   return {
     name: entry.name,
@@ -195,6 +239,17 @@ function kdsForm(entry: KdsDevice): KdsForm {
   };
 }
 
+function ingredientForm(entry: Ingredient): IngredientForm {
+  return {
+    name: entry.name,
+    unit: entry.unit,
+    stockQuantity: String(entry.stockQuantity),
+    unitCostCents: String(entry.unitCostCents),
+    lowStockThreshold: String(entry.lowStockThreshold),
+    isActive: entry.isActive,
+  };
+}
+
 export default function ManageOperationsPage() {
   const auth = useRequireRole(["DEV", "ADMIN"]);
   const [operations, setOperations] = useState<ManageOperationsResponse | null>(
@@ -205,6 +260,9 @@ export default function ManageOperationsPage() {
   const [adjustment, setAdjustment] =
     useState<AdjustmentForm>(initialAdjustment);
   const [stocktake, setStocktake] = useState<StocktakeForm>(initialStocktake);
+  const [ingredient, setIngredient] =
+    useState<IngredientForm>(initialIngredient);
+  const [recipe, setRecipe] = useState<RecipeForm>(initialRecipe);
   const [member, setMember] = useState<MemberForm>(initialMember);
   const [coupon, setCoupon] = useState<CouponForm>(initialCoupon);
   const [kds, setKds] = useState<KdsForm>(initialKds);
@@ -217,6 +275,9 @@ export default function ManageOperationsPage() {
   const [couponDrafts, setCouponDrafts] = useState<Record<string, CouponForm>>(
     {},
   );
+  const [ingredientDrafts, setIngredientDrafts] = useState<
+    Record<string, IngredientForm>
+  >({});
   const [kdsDrafts, setKdsDrafts] = useState<Record<string, KdsForm>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -232,6 +293,14 @@ export default function ManageOperationsPage() {
           item.stockQuantity !== null && item.stockQuantity !== undefined,
       ),
     [menuItems],
+  );
+  const recipeMenuItems = useMemo(
+    () => menuItems.filter((item) => item.isAvailable),
+    [menuItems],
+  );
+  const ingredients = useMemo(
+    () => operations?.ingredients ?? [],
+    [operations?.ingredients],
   );
 
   async function refresh() {
@@ -264,6 +333,14 @@ export default function ManageOperationsPage() {
           operationsResult.coupons.map((entry) => [
             entry.id,
             couponForm(entry),
+          ]),
+        ),
+      );
+      setIngredientDrafts(
+        Object.fromEntries(
+          operationsResult.ingredients.map((entry) => [
+            entry.id,
+            ingredientForm(entry),
           ]),
         ),
       );
@@ -304,6 +381,26 @@ export default function ManageOperationsPage() {
             {
               menuItemId: firstTracked.id,
               countedQuantity: String(firstTracked.stockQuantity ?? 0),
+              note: "",
+            },
+          ],
+        };
+      });
+      setRecipe((current) => {
+        const firstMenuItem = menuResult.categories
+          .flatMap((category) => category.items)
+          .find((item) => item.isAvailable);
+        const firstIngredient = operationsResult.ingredients.find(
+          (entry) => entry.isActive,
+        );
+        if (current.menuItemId || !firstMenuItem) return current;
+        return {
+          ...current,
+          menuItemId: firstMenuItem.id,
+          lines: [
+            {
+              ingredientId: firstIngredient?.id ?? "",
+              quantity: "1",
               note: "",
             },
           ],
@@ -438,6 +535,55 @@ export default function ManageOperationsPage() {
     }
   }
 
+  async function submitIngredient(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await apiFetch("/v1/manage/operations/ingredients", {
+        method: "POST",
+        body: JSON.stringify({
+          name: ingredient.name,
+          unit: ingredient.unit,
+          stockQuantity: Number(ingredient.stockQuantity || 0),
+          unitCostCents: Number(ingredient.unitCostCents || 0),
+          lowStockThreshold: Number(ingredient.lowStockThreshold || 0),
+          isActive: ingredient.isActive,
+        }),
+      });
+      setIngredient(initialIngredient);
+      setNotice("Ingredient saved.");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function submitRecipe(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await apiFetch("/v1/manage/operations/recipes", {
+        method: "POST",
+        body: JSON.stringify({
+          menuItemId: recipe.menuItemId,
+          yieldQuantity: Number(recipe.yieldQuantity || 1),
+          note: optional(recipe.note),
+          lines: recipe.lines
+            .filter((line) => line.ingredientId)
+            .map((line) => ({
+              ingredientId: line.ingredientId,
+              quantity: Number(line.quantity || 0),
+              note: optional(line.note),
+            })),
+        }),
+      });
+      setNotice("Recipe saved.");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function submitMember(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -525,10 +671,87 @@ export default function ManageOperationsPage() {
     }));
   }
 
+  function updateIngredientDraft(id: string, patch: Partial<IngredientForm>) {
+    setIngredientDrafts((current) => ({
+      ...current,
+      [id]: { ...(current[id] ?? initialIngredient), ...patch },
+    }));
+  }
+
   function updateKdsDraft(id: string, patch: Partial<KdsForm>) {
     setKdsDrafts((current) => ({
       ...current,
       [id]: { ...(current[id] ?? initialKds), ...patch },
+    }));
+  }
+
+  function recipeToForm(entry: MenuRecipe): RecipeForm {
+    return {
+      menuItemId: entry.menuItemId,
+      yieldQuantity: String(entry.yieldQuantity),
+      note: entry.note ?? "",
+      lines: entry.lines.map((line) => ({
+        ingredientId: line.ingredientId,
+        quantity: String(line.quantity),
+        note: line.note ?? "",
+      })),
+    };
+  }
+
+  function selectRecipeMenuItem(menuItemId: string) {
+    const existing = operations?.recipes.find(
+      (entry) => entry.menuItemId === menuItemId,
+    );
+    if (existing) {
+      setRecipe(recipeToForm(existing));
+      return;
+    }
+    const firstIngredient = operations?.ingredients.find(
+      (entry) => entry.isActive,
+    );
+    setRecipe({
+      menuItemId,
+      yieldQuantity: "1",
+      note: "",
+      lines: [
+        {
+          ingredientId: firstIngredient?.id ?? "",
+          quantity: "1",
+          note: "",
+        },
+      ],
+    });
+  }
+
+  function updateRecipeLine(index: number, patch: Partial<RecipeLineForm>) {
+    setRecipe((current) => ({
+      ...current,
+      lines: current.lines.map((line, lineIndex) =>
+        lineIndex === index ? { ...line, ...patch } : line,
+      ),
+    }));
+  }
+
+  function addRecipeLine() {
+    const firstIngredient = operations?.ingredients.find(
+      (entry) => entry.isActive,
+    );
+    setRecipe((current) => ({
+      ...current,
+      lines: [
+        ...current.lines,
+        { ingredientId: firstIngredient?.id ?? "", quantity: "1", note: "" },
+      ],
+    }));
+  }
+
+  function removeRecipeLine(index: number) {
+    setRecipe((current) => ({
+      ...current,
+      lines:
+        current.lines.length <= 1
+          ? current.lines
+          : current.lines.filter((_, lineIndex) => lineIndex !== index),
     }));
   }
 
@@ -548,6 +771,28 @@ export default function ManageOperationsPage() {
         }),
       });
       setNotice("Supplier updated.");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function saveIngredient(entry: Ingredient) {
+    const draft = ingredientDrafts[entry.id] ?? ingredientForm(entry);
+    setError(null);
+    try {
+      await apiFetch(`/v1/manage/operations/ingredients/${entry.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: draft.name,
+          unit: draft.unit,
+          stockQuantity: Number(draft.stockQuantity || 0),
+          unitCostCents: Number(draft.unitCostCents || 0),
+          lowStockThreshold: Number(draft.lowStockThreshold || 0),
+          isActive: draft.isActive,
+        }),
+      });
+      setNotice("Ingredient updated.");
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -624,8 +869,8 @@ export default function ManageOperationsPage() {
         <section className="page-header">
           <h1>Operations</h1>
           <p>
-            Manage purchasing contacts, item stock movement, loyalty members,
-            coupons, KDS devices, and audit history.
+            Manage purchasing contacts, item stock movement, ingredient costs,
+            recipes, loyalty members, coupons, KDS devices, and audit history.
           </p>
         </section>
         {error ? <div className="error card">{error}</div> : null}
@@ -930,6 +1175,263 @@ export default function ManageOperationsPage() {
               }
             >
               Apply stocktake
+            </button>
+          </form>
+
+          <form
+            className="card grid"
+            onSubmit={(event) => void submitIngredient(event)}
+          >
+            <h2>Ingredient</h2>
+            <div className="grid two">
+              <label className="field">
+                <span>Name</span>
+                <input
+                  className="input"
+                  value={ingredient.name}
+                  onChange={(event) =>
+                    setIngredient((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Unit</span>
+                <input
+                  className="input"
+                  value={ingredient.unit}
+                  placeholder="g, ml, unit"
+                  onChange={(event) =>
+                    setIngredient((current) => ({
+                      ...current,
+                      unit: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <div className="grid two">
+              <label className="field">
+                <span>Stock quantity</span>
+                <input
+                  className="input"
+                  inputMode="numeric"
+                  value={ingredient.stockQuantity}
+                  onChange={(event) =>
+                    setIngredient((current) => ({
+                      ...current,
+                      stockQuantity: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Unit cost</span>
+                <input
+                  className="input"
+                  inputMode="numeric"
+                  value={ingredient.unitCostCents}
+                  onChange={(event) =>
+                    setIngredient((current) => ({
+                      ...current,
+                      unitCostCents: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Low stock threshold</span>
+                <input
+                  className="input"
+                  inputMode="numeric"
+                  value={ingredient.lowStockThreshold}
+                  onChange={(event) =>
+                    setIngredient((current) => ({
+                      ...current,
+                      lowStockThreshold: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field checkbox-field">
+                <span>Active</span>
+                <input
+                  type="checkbox"
+                  checked={ingredient.isActive}
+                  onChange={(event) =>
+                    setIngredient((current) => ({
+                      ...current,
+                      isActive: event.target.checked,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <button
+              className="btn primary"
+              disabled={!ingredient.name.trim() || !ingredient.unit.trim()}
+            >
+              Save ingredient
+            </button>
+          </form>
+
+          <form
+            className="card grid"
+            onSubmit={(event) => void submitRecipe(event)}
+          >
+            <div className="row between">
+              <h2>Recipe</h2>
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={addRecipeLine}
+              >
+                Add line
+              </button>
+            </div>
+            <label className="field">
+              <span>Menu item</span>
+              <select
+                className="select"
+                value={recipe.menuItemId}
+                onChange={(event) => selectRecipeMenuItem(event.target.value)}
+              >
+                {recipeMenuItems.length === 0 ? (
+                  <option value="">No available menu items</option>
+                ) : null}
+                {recipeMenuItems.map((item) => (
+                  <option value={item.id} key={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="grid two">
+              <label className="field">
+                <span>Yield quantity</span>
+                <input
+                  className="input"
+                  inputMode="numeric"
+                  value={recipe.yieldQuantity}
+                  onChange={(event) =>
+                    setRecipe((current) => ({
+                      ...current,
+                      yieldQuantity: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Note</span>
+                <input
+                  className="input"
+                  value={recipe.note}
+                  onChange={(event) =>
+                    setRecipe((current) => ({
+                      ...current,
+                      note: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <div className="operations-edit-list">
+              {recipe.lines.map((line, index) => {
+                const selectedIngredient = ingredients.find(
+                  (entry) => entry.id === line.ingredientId,
+                );
+                const lineCostCents =
+                  (selectedIngredient?.unitCostCents ?? 0) *
+                  Number(line.quantity || 0);
+                return (
+                  <div
+                    className="operations-record-card"
+                    key={`${line.ingredientId}-${index}`}
+                  >
+                    <div className="operations-record-grid">
+                      <label className="field">
+                        <span>Ingredient</span>
+                        <select
+                          className="select"
+                          value={line.ingredientId}
+                          onChange={(event) =>
+                            updateRecipeLine(index, {
+                              ingredientId: event.target.value,
+                            })
+                          }
+                        >
+                          {ingredients.length === 0 ? (
+                            <option value="">No ingredients</option>
+                          ) : null}
+                          {ingredients.map((entry) => (
+                            <option value={entry.id} key={entry.id}>
+                              {entry.name}
+                              {entry.isActive ? "" : " (inactive)"}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Quantity</span>
+                        <input
+                          className="input"
+                          inputMode="numeric"
+                          value={line.quantity}
+                          onChange={(event) =>
+                            updateRecipeLine(index, {
+                              quantity: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Line note</span>
+                        <input
+                          className="input"
+                          value={line.note}
+                          onChange={(event) =>
+                            updateRecipeLine(index, {
+                              note: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Line cost</span>
+                        <input
+                          className="input"
+                          value={formatCents(
+                            lineCostCents,
+                            operations?.store.currency,
+                            operations?.store.locale,
+                          )}
+                          disabled
+                        />
+                      </label>
+                    </div>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      disabled={recipe.lines.length <= 1}
+                      onClick={() => removeRecipeLine(index)}
+                    >
+                      Remove line
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              className="btn primary"
+              disabled={
+                !recipe.menuItemId ||
+                ingredients.length === 0 ||
+                recipe.lines.every((line) => !line.ingredientId)
+              }
+            >
+              Save recipe
             </button>
           </form>
 
@@ -1354,6 +1856,216 @@ export default function ManageOperationsPage() {
               ))}
               {operations?.stocktakes.length === 0 ? (
                 <span className="meta">No stocktakes yet.</span>
+              ) : null}
+            </div>
+          </article>
+
+          <article className="card grid">
+            <h2>Ingredients</h2>
+            <div className="operations-edit-list">
+              {ingredients.map((entry) => {
+                const draft =
+                  ingredientDrafts[entry.id] ?? ingredientForm(entry);
+                return (
+                  <div className="operations-record-card" key={entry.id}>
+                    <div className="row between">
+                      <strong>{entry.name}</strong>
+                      <span
+                        className={
+                          entry.isLowStock
+                            ? "status urgent"
+                            : draft.isActive
+                              ? "status ok"
+                              : "status"
+                        }
+                      >
+                        {entry.isLowStock
+                          ? "Low stock"
+                          : draft.isActive
+                            ? "Active"
+                            : "Inactive"}
+                      </span>
+                    </div>
+                    <div className="row between">
+                      <span className="meta">
+                        {entry.stockQuantity} {entry.unit} on hand
+                      </span>
+                      <span className="meta">
+                        {formatCents(
+                          entry.unitCostCents,
+                          operations?.store.currency,
+                          operations?.store.locale,
+                        )}{" "}
+                        / {entry.unit}
+                      </span>
+                    </div>
+                    <div className="operations-record-grid">
+                      <label className="field">
+                        <span>Name</span>
+                        <input
+                          className="input"
+                          value={draft.name}
+                          onChange={(event) =>
+                            updateIngredientDraft(entry.id, {
+                              name: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Unit</span>
+                        <input
+                          className="input"
+                          value={draft.unit}
+                          onChange={(event) =>
+                            updateIngredientDraft(entry.id, {
+                              unit: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Stock quantity</span>
+                        <input
+                          className="input"
+                          inputMode="numeric"
+                          value={draft.stockQuantity}
+                          onChange={(event) =>
+                            updateIngredientDraft(entry.id, {
+                              stockQuantity: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Unit cost</span>
+                        <input
+                          className="input"
+                          inputMode="numeric"
+                          value={draft.unitCostCents}
+                          onChange={(event) =>
+                            updateIngredientDraft(entry.id, {
+                              unitCostCents: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Low stock threshold</span>
+                        <input
+                          className="input"
+                          inputMode="numeric"
+                          value={draft.lowStockThreshold}
+                          onChange={(event) =>
+                            updateIngredientDraft(entry.id, {
+                              lowStockThreshold: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="mini-check operations-active-check">
+                        <input
+                          type="checkbox"
+                          checked={draft.isActive}
+                          onChange={(event) =>
+                            updateIngredientDraft(entry.id, {
+                              isActive: event.target.checked,
+                            })
+                          }
+                        />
+                        <span>Active</span>
+                      </label>
+                    </div>
+                    <button
+                      className="btn primary"
+                      type="button"
+                      disabled={!draft.name.trim() || !draft.unit.trim()}
+                      onClick={() => void saveIngredient(entry)}
+                    >
+                      Save ingredient
+                    </button>
+                  </div>
+                );
+              })}
+              {ingredients.length === 0 ? (
+                <span className="meta">No ingredients yet.</span>
+              ) : null}
+            </div>
+          </article>
+
+          <article className="card grid">
+            <h2>Recipes</h2>
+            <div className="operations-edit-list">
+              {(operations?.recipes ?? []).map((entry) => (
+                <div className="operations-record-card" key={entry.id}>
+                  <div className="row between">
+                    <div>
+                      <strong>{entry.menuItemName}</strong>
+                      <p>
+                        Yield {entry.yieldQuantity} / updated{" "}
+                        {formatDateTime(entry.updatedAt)}
+                      </p>
+                    </div>
+                    <span
+                      className={
+                        entry.marginCents >= 0 ? "status ok" : "status urgent"
+                      }
+                    >
+                      {formatBps(entry.marginBps)} margin
+                    </span>
+                  </div>
+                  <div className="row between">
+                    <span className="meta">
+                      Price{" "}
+                      {formatCents(
+                        entry.menuItemPriceCents,
+                        operations?.store.currency,
+                        operations?.store.locale,
+                      )}
+                    </span>
+                    <span className="meta">
+                      Cost{" "}
+                      {formatCents(
+                        entry.costCents,
+                        operations?.store.currency,
+                        operations?.store.locale,
+                      )}{" "}
+                      / margin{" "}
+                      {formatCents(
+                        entry.marginCents,
+                        operations?.store.currency,
+                        operations?.store.locale,
+                      )}
+                    </span>
+                  </div>
+                  {entry.note ? <p>{entry.note}</p> : null}
+                  <div className="list compact-list">
+                    {entry.lines.map((line) => (
+                      <div className="row between" key={line.id}>
+                        <span>
+                          {line.ingredientName} x {line.quantity} {line.unit}
+                        </span>
+                        <span className="meta">
+                          {formatCents(
+                            line.costCents,
+                            operations?.store.currency,
+                            operations?.store.locale,
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={() => setRecipe(recipeToForm(entry))}
+                  >
+                    Edit recipe
+                  </button>
+                </div>
+              ))}
+              {operations?.recipes.length === 0 ? (
+                <span className="meta">No recipes yet.</span>
               ) : null}
             </div>
           </article>

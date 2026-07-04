@@ -9,6 +9,7 @@ import {
 import {
   addMenuItem,
   createCoupon,
+  createIngredient,
   createStaffUser,
   createInventoryAdjustment,
   createKdsDevice,
@@ -34,6 +35,7 @@ import {
   receivePurchaseOrder,
   updateDiningTable,
   updateCoupon,
+  updateIngredient,
   updateKdsDevice,
   updateMenuCategory,
   updateMenuItem,
@@ -42,6 +44,7 @@ import {
   updateStaffUser,
   updateStoreSettings,
   updateSupplier,
+  upsertRecipe,
 } from "../data.js";
 
 export const manageRouter = Router();
@@ -213,6 +216,31 @@ const stocktakeBodySchema = z.object({
     .max(100),
 });
 
+const ingredientBodySchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  unit: z.string().trim().min(1).max(40),
+  stockQuantity: z.number().int().min(0).max(999999).default(0),
+  unitCostCents: z.number().int().min(0).max(99999999).default(0),
+  lowStockThreshold: z.number().int().min(0).max(999999).default(0),
+  isActive: z.boolean().default(true),
+});
+
+const recipeBodySchema = z.object({
+  menuItemId: z.string().trim().min(1),
+  yieldQuantity: z.number().int().min(1).max(9999).default(1),
+  note: z.string().trim().max(500).optional().nullable(),
+  lines: z
+    .array(
+      z.object({
+        ingredientId: z.string().trim().min(1),
+        quantity: z.number().int().min(1).max(999999),
+        note: z.string().trim().max(300).optional().nullable(),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
 manageRouter.get("/store-settings", async (_req, res, next) => {
   try {
     res.json(await getStoreSettings());
@@ -364,6 +392,34 @@ manageRouter.post("/operations/stocktakes", async (req, res, next) => {
   try {
     const body = stocktakeBodySchema.parse(req.body);
     res.status(201).json(await createStocktake(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.post("/operations/ingredients", async (req, res, next) => {
+  try {
+    const body = ingredientBodySchema.parse(req.body);
+    res.status(201).json(await createIngredient(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.patch("/operations/ingredients/:id", async (req, res, next) => {
+  try {
+    const params = z.object({ id: z.string().trim().min(1) }).parse(req.params);
+    const body = ingredientBodySchema.partial().parse(req.body);
+    res.json(await updateIngredient(params.id, body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.post("/operations/recipes", async (req, res, next) => {
+  try {
+    const body = recipeBodySchema.parse(req.body);
+    res.status(201).json(await upsertRecipe(body));
   } catch (error) {
     next(error);
   }

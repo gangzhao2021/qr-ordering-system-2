@@ -614,6 +614,44 @@ export type Stocktake = {
   lines: StocktakeLine[];
 };
 
+export type Ingredient = {
+  id: string;
+  name: string;
+  unit: string;
+  stockQuantity: number;
+  unitCostCents: number;
+  lowStockThreshold: number;
+  isActive: boolean;
+  isLowStock: boolean;
+  createdAt: string;
+};
+
+export type RecipeLine = {
+  id: string;
+  ingredientId: string;
+  ingredientName: string;
+  unit: string;
+  quantity: number;
+  unitCostCents: number;
+  costCents: number;
+  note?: string | null;
+};
+
+export type MenuRecipe = {
+  id: string;
+  menuItemId: string;
+  menuItemName: string;
+  menuItemPriceCents: number;
+  yieldQuantity: number;
+  note?: string | null;
+  costCents: number;
+  marginCents: number;
+  marginBps: number;
+  createdAt: string;
+  updatedAt: string;
+  lines: RecipeLine[];
+};
+
 export type Member = {
   id: string;
   name?: string | null;
@@ -687,6 +725,8 @@ export type ManageOperationsResponse = {
   purchaseOrders: PurchaseOrder[];
   inventoryAdjustments: InventoryAdjustment[];
   stocktakes: Stocktake[];
+  ingredients: Ingredient[];
+  recipes: MenuRecipe[];
   members: Member[];
   coupons: Coupon[];
   kdsDevices: KdsDevice[];
@@ -786,6 +826,28 @@ export type CreateStocktakeRequest = {
   lines: Array<{
     menuItemId: string;
     countedQuantity: number;
+    note?: string | null;
+  }>;
+};
+
+export type CreateIngredientRequest = Pick<
+  Ingredient,
+  | "name"
+  | "unit"
+  | "stockQuantity"
+  | "unitCostCents"
+  | "lowStockThreshold"
+  | "isActive"
+>;
+export type UpdateIngredientRequest = Partial<CreateIngredientRequest>;
+
+export type UpsertRecipeRequest = {
+  menuItemId: string;
+  yieldQuantity?: number;
+  note?: string | null;
+  lines: Array<{
+    ingredientId: string;
+    quantity: number;
     note?: string | null;
   }>;
 };
