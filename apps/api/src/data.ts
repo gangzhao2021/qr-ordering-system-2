@@ -16,6 +16,7 @@ import type {
   CreatePurchaseOrderRequest,
   CreateServiceRequestRequest,
   CreateStaffUserRequest,
+  CreateStocktakeRequest,
   CreateSupplierRequest,
   CustomerOrder,
   DiningTable,
@@ -51,6 +52,7 @@ import type {
   ReceivePurchaseOrderRequest,
   ServiceRequest,
   ServiceRequestStatus,
+  Stocktake,
   StoreMarket,
   StoreSettings,
   StoreSummary,
@@ -634,12 +636,14 @@ function mapInventoryAdjustment(adjustment: {
   id: string;
   menuItemId: string;
   purchaseOrderId: string | null;
+  stocktakeId: string | null;
   quantityDelta: number;
   reason: string;
   note: string | null;
   createdAt: Date;
   menuItem: { name: string };
   purchaseOrder?: { orderNumber: string } | null;
+  stocktake?: { name: string } | null;
 }): InventoryAdjustment {
   return {
     id: adjustment.id,
@@ -647,10 +651,50 @@ function mapInventoryAdjustment(adjustment: {
     menuItemName: adjustment.menuItem.name,
     purchaseOrderId: adjustment.purchaseOrderId,
     purchaseOrderNumber: adjustment.purchaseOrder?.orderNumber ?? null,
+    stocktakeId: adjustment.stocktakeId,
+    stocktakeName: adjustment.stocktake?.name ?? null,
     quantityDelta: adjustment.quantityDelta,
     reason: adjustment.reason,
     note: adjustment.note,
     createdAt: toIso(adjustment.createdAt),
+  };
+}
+
+function mapStocktake(stocktake: {
+  id: string;
+  name: string;
+  status: string;
+  note: string | null;
+  countedAt: Date;
+  appliedAt: Date;
+  createdAt: Date;
+  lines: Array<{
+    id: string;
+    menuItemId: string;
+    expectedQuantity: number;
+    countedQuantity: number;
+    differenceQuantity: number;
+    note: string | null;
+    menuItem: { name: string };
+  }>;
+}): Stocktake {
+  return {
+    id: stocktake.id,
+    name: stocktake.name,
+    status: stocktake.status === "CANCELED" ? "CANCELED" : "APPLIED",
+    note: stocktake.note,
+    countedAt: toIso(stocktake.countedAt),
+    appliedAt: optionalIso(stocktake.appliedAt),
+    createdAt: toIso(stocktake.createdAt),
+    lines: stocktake.lines.map((line) => ({
+      id: line.id,
+      menuItemId: line.menuItemId,
+      menuItemName: line.menuItem.name,
+      expectedQuantity: line.expectedQuantity,
+      countedQuantity: line.countedQuantity,
+      differenceQuantity: line.differenceQuantity,
+      note: line.note,
+    })),
   };
 }
 
@@ -2334,6 +2378,7 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
     suppliers,
     purchaseOrders,
     inventoryAdjustments,
+    stocktakes,
     members,
     memberPaymentStats,
     coupons,
@@ -2365,6 +2410,18 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
       include: {
         menuItem: { select: { name: true } },
         purchaseOrder: { select: { orderNumber: true } },
+        stocktake: { select: { name: true } },
+      },
+    }),
+    prisma.stocktake.findMany({
+      where: { storeId: store.id },
+      orderBy: { countedAt: "desc" },
+      take: 30,
+      include: {
+        lines: {
+          orderBy: { id: "asc" },
+          include: { menuItem: { select: { name: true } } },
+        },
       },
     }),
     prisma.member.findMany({
@@ -2421,6 +2478,7 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
     suppliers: suppliers.map(mapSupplier),
     purchaseOrders: purchaseOrders.map(mapPurchaseOrder),
     inventoryAdjustments: inventoryAdjustments.map(mapInventoryAdjustment),
+    stocktakes: stocktakes.map(mapStocktake),
     members: members.map((member) =>
       mapMember({ ...member, ...(memberStats.get(member.id) ?? {}) }),
     ),
@@ -3073,6 +3131,132 @@ export async function createInventoryAdjustment(
       },
     });
     return mapInventoryAdjustment(adjustment);
+  });
+}
+
+export async function createStocktake(input: CreateStocktakeRequest) {
+  const store = await getDefaultStore();
+  if (!input.lines.length) {
+    throw new HttpError(
+      400,
+      "EMPTY_STOCKTAKE",
+      "Stocktake must include at least one counted item",
+    );
+  }
+
+  const countedByItem = new Map<
+    string,
+    { countedQuantity: number; note: string | null }
+  >();
+  for (const line of input.lines) {
+    const menuItemId = line.menuItemId.trim();
+    if (!menuItemId) {
+      throw new HttpError(400, "INVALID_STOCKTAKE_LINE", "Menu item required");
+    }
+    if (!Number.isInteger(line.countedQuantity) || line.countedQuantity < 0) {
+      throw new HttpError(
+        400,
+        "INVALID_COUNTED_QUANTITY",
+        "Counted quantity must be zero or greater",
+      );
+    }
+    countedByItem.set(menuItemId, {
+      countedQuantity: line.countedQuantity,
+      note: line.note?.trim() || null,
+    });
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const menuItems = await tx.menuItem.findMany({
+      where: {
+        storeId: store.id,
+        id: { in: Array.from(countedByItem.keys()) },
+      },
+      select: { id: true, name: true, stockQuantity: true },
+    });
+    if (menuItems.length !== countedByItem.size) {
+      throw new HttpError(404, "MENU_ITEM_NOT_FOUND", "Menu item not found");
+    }
+    const untracked = menuItems.find((item) => item.stockQuantity === null);
+    if (untracked) {
+      throw new HttpError(
+        400,
+        "UNTRACKED_STOCK_ITEM",
+        `${untracked.name} does not track stock`,
+      );
+    }
+
+    const countedAt = input.countedAt ? new Date(input.countedAt) : new Date();
+    const appliedAt = new Date();
+    const stocktake = await tx.stocktake.create({
+      data: {
+        storeId: store.id,
+        name: input.name.trim(),
+        status: "APPLIED",
+        note: input.note?.trim() || null,
+        countedAt,
+        appliedAt,
+      },
+    });
+
+    for (const item of menuItems) {
+      const counted = countedByItem.get(item.id);
+      if (!counted) continue;
+      const expectedQuantity = item.stockQuantity ?? 0;
+      const differenceQuantity = counted.countedQuantity - expectedQuantity;
+      await tx.stocktakeLine.create({
+        data: {
+          stocktakeId: stocktake.id,
+          menuItemId: item.id,
+          expectedQuantity,
+          countedQuantity: counted.countedQuantity,
+          differenceQuantity,
+          note: counted.note,
+        },
+      });
+      await tx.menuItem.update({
+        where: { id: item.id },
+        data: { stockQuantity: counted.countedQuantity },
+      });
+      if (differenceQuantity !== 0) {
+        await tx.inventoryAdjustment.create({
+          data: {
+            storeId: store.id,
+            menuItemId: item.id,
+            stocktakeId: stocktake.id,
+            quantityDelta: differenceQuantity,
+            reason: "Stocktake applied",
+            note:
+              counted.note ||
+              `${stocktake.name}: ${expectedQuantity} -> ${counted.countedQuantity}`,
+          },
+        });
+      }
+    }
+
+    await tx.auditLog.create({
+      data: {
+        storeId: store.id,
+        action: "STOCKTAKE_APPLIED",
+        entityType: "Stocktake",
+        entityId: stocktake.id,
+        metadata: {
+          name: stocktake.name,
+          lineCount: menuItems.length,
+        },
+      },
+    });
+
+    const saved = await tx.stocktake.findUniqueOrThrow({
+      where: { id: stocktake.id },
+      include: {
+        lines: {
+          orderBy: { id: "asc" },
+          include: { menuItem: { select: { name: true } } },
+        },
+      },
+    });
+    return mapStocktake(saved);
   });
 }
 

@@ -45,6 +45,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Review print jobs and trigger reprints.
 - Manage suppliers, inventory adjustments, members, coupons, KDS device tokens, and audit history.
 - Review member payment summaries and coupon redemption counts.
+- Apply stocktakes for tracked menu item inventory and review stocktake differences.
 
 ### Printer Service
 
@@ -55,7 +56,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 
 - Live Stripe/Interac/WeChat Pay/Alipay capture and reconciliation.
 - Customer feedback and richer customer profile history.
-- Recipes/BOM costing, stocktake, and supplier invoice reconciliation.
+- Recipes/BOM costing and supplier invoice reconciliation.
 - Deeper analytics and reporting.
 - DEV multi-store onboarding and fleet operations.
 - KDS device heartbeat and category routing enforcement.

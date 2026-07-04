@@ -26,6 +26,7 @@
     "smoke:p0": "node scripts/smoke-p0.mjs",
     "smoke:p1": "node scripts/smoke-p1.mjs",
     "smoke:p1-members": "node scripts/smoke-p1-members.mjs",
+    "smoke:p1-inventory": "node scripts/smoke-p1-inventory.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

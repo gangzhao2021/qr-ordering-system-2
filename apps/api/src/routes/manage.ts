@@ -16,6 +16,7 @@ import {
   createMenuCategory,
   createDiningTable,
   createPurchaseOrder,
+  createStocktake,
   createSupplier,
   deleteMenuCategory,
   deleteDiningTable,
@@ -196,6 +197,22 @@ const receivePurchaseOrderBodySchema = z.object({
     .max(100),
 });
 
+const stocktakeBodySchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  note: z.string().trim().max(500).optional().nullable(),
+  countedAt: z.string().datetime().optional().nullable(),
+  lines: z
+    .array(
+      z.object({
+        menuItemId: z.string().trim().min(1),
+        countedQuantity: z.number().int().min(0).max(999999),
+        note: z.string().trim().max(300).optional().nullable(),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
 manageRouter.get("/store-settings", async (_req, res, next) => {
   try {
     res.json(await getStoreSettings());
@@ -342,6 +359,15 @@ manageRouter.post(
     }
   },
 );
+
+manageRouter.post("/operations/stocktakes", async (req, res, next) => {
+  try {
+    const body = stocktakeBodySchema.parse(req.body);
+    res.status(201).json(await createStocktake(body));
+  } catch (error) {
+    next(error);
+  }
+});
 
 manageRouter.post("/operations/members", async (req, res, next) => {
   try {

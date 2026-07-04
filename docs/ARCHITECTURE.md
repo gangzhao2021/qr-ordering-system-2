@@ -63,6 +63,8 @@ P1 purchasing adds `PurchaseOrder` and `PurchaseOrderLine` records. Management c
 
 P1 member/coupon checkout lets customer orders include an optional name, phone, and coupon code. The API upserts a member from phone, snapshots coupon discount on the order, and includes coupon discounts in public/FOH table totals and print ticket totals. FOH can also attach a member phone or coupon at checkout. Successful paid checkout increments member points, writes a `MemberPointLedger` row, and records `CouponRedemption` rows for operations reporting. Coupon rules intentionally stay simple: active window, minimum subtotal, fixed amount or percentage discount, and one redemption per member.
 
+P1 stocktake adds applied stock counts for tracked menu items. Management can submit a stocktake with one or more counted lines; the API snapshots expected quantity, stores counted quantity and difference on `StocktakeLine`, updates `MenuItem.stockQuantity` to the counted value, and creates linked `InventoryAdjustment` rows for non-zero differences. This is intentionally an apply-now workflow; draft counts, ingredient-level stock, and recipe/BOM cost rollups remain later P1 work.
+
 KDS device records provide token and station inventory for device setup. The current kitchen page is still staff-session based and read-only; device-token heartbeat and station authorization are later-phase hardening.
 
 ## Table Management

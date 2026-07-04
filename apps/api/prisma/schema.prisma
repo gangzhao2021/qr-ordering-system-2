@@ -108,6 +108,7 @@ model Store {
   suppliers            Supplier[]
   purchaseOrders       PurchaseOrder[]
   inventoryAdjustments InventoryAdjustment[]
+  stocktakes           Stocktake[]
   members              Member[]
   coupons              Coupon[]
   couponRedemptions    CouponRedemption[]
@@ -198,6 +199,7 @@ model MenuItem {
   orderItems OrderItem[]
   inventoryAdjustments InventoryAdjustment[]
   purchaseOrderLines PurchaseOrderLine[]
+  stocktakeLines StocktakeLine[]
 
   @@index([storeId])
   @@index([categoryId])
@@ -409,6 +411,7 @@ model InventoryAdjustment {
   storeId       String
   menuItemId    String
   purchaseOrderId String?
+  stocktakeId   String?
   quantityDelta Int
   reason        String
   note          String?
@@ -417,10 +420,48 @@ model InventoryAdjustment {
   store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   menuItem MenuItem @relation(fields: [menuItemId], references: [id])
   purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  stocktake Stocktake? @relation(fields: [stocktakeId], references: [id], onDelete: SetNull)
 
   @@index([storeId])
   @@index([menuItemId])
   @@index([purchaseOrderId])
+  @@index([stocktakeId])
+}
+
+model Stocktake {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  status    String   @default("APPLIED")
+  note      String?
+  countedAt DateTime @default(now())
+  appliedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  lines StocktakeLine[]
+  inventoryAdjustments InventoryAdjustment[]
+
+  @@index([storeId])
+  @@index([status])
+  @@index([countedAt])
+}
+
+model StocktakeLine {
+  id                 String @id @default(cuid())
+  stocktakeId        String
+  menuItemId         String
+  expectedQuantity   Int
+  countedQuantity    Int
+  differenceQuantity Int
+  note               String?
+
+  stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  menuItem  MenuItem  @relation(fields: [menuItemId], references: [id])
+
+  @@index([stocktakeId])
+  @@index([menuItemId])
 }
 
 model Member {

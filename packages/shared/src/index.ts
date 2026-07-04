@@ -585,10 +585,33 @@ export type InventoryAdjustment = {
   menuItemName: string;
   purchaseOrderId?: string | null;
   purchaseOrderNumber?: string | null;
+  stocktakeId?: string | null;
+  stocktakeName?: string | null;
   quantityDelta: number;
   reason: string;
   note?: string | null;
   createdAt: string;
+};
+
+export type StocktakeLine = {
+  id: string;
+  menuItemId: string;
+  menuItemName: string;
+  expectedQuantity: number;
+  countedQuantity: number;
+  differenceQuantity: number;
+  note?: string | null;
+};
+
+export type Stocktake = {
+  id: string;
+  name: string;
+  status: "APPLIED" | "CANCELED";
+  note?: string | null;
+  countedAt: string;
+  appliedAt?: string | null;
+  createdAt: string;
+  lines: StocktakeLine[];
 };
 
 export type Member = {
@@ -663,6 +686,7 @@ export type ManageOperationsResponse = {
   suppliers: Supplier[];
   purchaseOrders: PurchaseOrder[];
   inventoryAdjustments: InventoryAdjustment[];
+  stocktakes: Stocktake[];
   members: Member[];
   coupons: Coupon[];
   kdsDevices: KdsDevice[];
@@ -753,6 +777,17 @@ export type CreateInventoryAdjustmentRequest = {
   quantityDelta: number;
   reason: string;
   note?: string | null;
+};
+
+export type CreateStocktakeRequest = {
+  name: string;
+  note?: string | null;
+  countedAt?: string | null;
+  lines: Array<{
+    menuItemId: string;
+    countedQuantity: number;
+    note?: string | null;
+  }>;
 };
 
 export type CreateMemberRequest = Pick<Member, "name" | "phone" | "email"> & {

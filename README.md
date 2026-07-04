@@ -24,6 +24,7 @@ pnpm dev
 - P0 smoke against a running API: `pnpm smoke:p0`
 - P1 purchasing smoke against a running API: `pnpm smoke:p1`
 - P1 member/coupon smoke against a running API: `pnpm smoke:p1-members`
+- P1 inventory smoke against a running API: `pnpm smoke:p1-inventory`
 - P0 closeout checklist: `docs/P0_EXIT_CRITERIA.md`
 
 This repo includes `.npmrc` settings that use a hoisted/copy install strategy. That is slower than
@@ -47,6 +48,10 @@ updates the menu item quantity with linked inventory movement rows.
 order with a member phone and coupon code, closes the table through FOH, then verifies payment
 member snapshots, coupon discount, earned points, member spend aggregation, and coupon redemption
 count.
+
+`pnpm smoke:p1-inventory` expects a running API. It creates and applies a real stocktake,
+verifies FOH cannot apply stocktakes, confirms counted stock updates the tracked menu item,
+and checks the linked inventory adjustment history.
 
 `pnpm test` runs package unit tests for shared contracts, API auth/session helpers, and web
 request/component behavior. It does not start the database or browser.
@@ -135,10 +140,11 @@ history should be deactivated; hard delete is limited to unused tables.
 Store settings include Canada and China presets, supported languages, invoice instructions,
 tax-rule JSON, price-includes-tax behavior, enabled payment methods, and tip settings.
 
-Operations management covers supplier contacts, stock adjustment history, member records with
-payment/spend summaries, coupon records with minimum subtotals and redemption counts, KDS device
-tokens, and audit history. Purchasing adds P1 purchase orders and receiving: received quantities
-update menu item stock and create linked inventory movement rows. Customer-facing membership now
-supports optional phone capture, coupon redemption at order/checkout, and points accrual on paid
-FOH checkout. Recipe BOM costing, supplier invoices, customer profile history, feedback, marketing
-automation, and real payment gateway reconciliation remain later-phase work.
+Operations management covers supplier contacts, stock adjustment history, applied stocktakes,
+member records with payment/spend summaries, coupon records with minimum subtotals and redemption
+counts, KDS device tokens, and audit history. Purchasing adds P1 purchase orders and receiving:
+received quantities update menu item stock and create linked inventory movement rows.
+Customer-facing membership now supports optional phone capture, coupon redemption at
+order/checkout, and points accrual on paid FOH checkout. Recipe BOM costing, supplier invoices,
+customer profile history, feedback, marketing automation, and real payment gateway reconciliation
+remain later-phase work.

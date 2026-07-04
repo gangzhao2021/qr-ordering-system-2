@@ -33,6 +33,19 @@ type AdjustmentForm = {
   note: string;
 };
 
+type StocktakeLineForm = {
+  menuItemId: string;
+  countedQuantity: string;
+  note: string;
+};
+
+type StocktakeForm = {
+  name: string;
+  note: string;
+  countedAt: string;
+  lines: StocktakeLineForm[];
+};
+
 type MemberForm = {
   name: string;
   phone: string;
@@ -71,6 +84,13 @@ const initialAdjustment: AdjustmentForm = {
   quantityDelta: "1",
   reason: "Stock count",
   note: "",
+};
+
+const initialStocktake: StocktakeForm = {
+  name: "",
+  note: "",
+  countedAt: "",
+  lines: [{ menuItemId: "", countedQuantity: "0", note: "" }],
 };
 
 const initialMember: MemberForm = {
@@ -130,6 +150,10 @@ function signed(value: number) {
   return value > 0 ? `+${value}` : String(value);
 }
 
+function stockLabel(value?: number | null) {
+  return value === null || value === undefined ? "Untracked" : String(value);
+}
+
 function supplierForm(entry: Supplier): SupplierForm {
   return {
     name: entry.name,
@@ -180,6 +204,7 @@ export default function ManageOperationsPage() {
   const [supplier, setSupplier] = useState<SupplierForm>(initialSupplier);
   const [adjustment, setAdjustment] =
     useState<AdjustmentForm>(initialAdjustment);
+  const [stocktake, setStocktake] = useState<StocktakeForm>(initialStocktake);
   const [member, setMember] = useState<MemberForm>(initialMember);
   const [coupon, setCoupon] = useState<CouponForm>(initialCoupon);
   const [kds, setKds] = useState<KdsForm>(initialKds);
@@ -199,6 +224,14 @@ export default function ManageOperationsPage() {
   const menuItems = useMemo(
     () => menu?.categories.flatMap((category) => category.items) ?? [],
     [menu],
+  );
+  const trackedMenuItems = useMemo(
+    () =>
+      menuItems.filter(
+        (item) =>
+          item.stockQuantity !== null && item.stockQuantity !== undefined,
+      ),
+    [menuItems],
   );
 
   async function refresh() {
@@ -245,8 +278,37 @@ export default function ManageOperationsPage() {
       setAdjustment((current) => ({
         ...current,
         menuItemId:
-          current.menuItemId || menuResult.categories[0]?.items[0]?.id || "",
+          current.menuItemId ||
+          menuResult.categories
+            .flatMap((category) => category.items)
+            .find(
+              (item) =>
+                item.stockQuantity !== null && item.stockQuantity !== undefined,
+            )?.id ||
+          menuResult.categories[0]?.items[0]?.id ||
+          "",
       }));
+      setStocktake((current) => {
+        const firstTracked = menuResult.categories
+          .flatMap((category) => category.items)
+          .find(
+            (item) =>
+              item.stockQuantity !== null && item.stockQuantity !== undefined,
+          );
+        if (!firstTracked || current.lines.some((line) => line.menuItemId)) {
+          return current;
+        }
+        return {
+          ...current,
+          lines: [
+            {
+              menuItemId: firstTracked.id,
+              countedQuantity: String(firstTracked.stockQuantity ?? 0),
+              note: "",
+            },
+          ],
+        };
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -296,6 +358,80 @@ export default function ManageOperationsPage() {
         menuItemId: current.menuItemId,
       }));
       setNotice("Inventory adjustment saved.");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function updateStocktakeLine(
+    index: number,
+    patch: Partial<StocktakeLineForm>,
+  ) {
+    setStocktake((current) => ({
+      ...current,
+      lines: current.lines.map((line, lineIndex) =>
+        lineIndex === index ? { ...line, ...patch } : line,
+      ),
+    }));
+  }
+
+  function addStocktakeLine() {
+    const firstItem = trackedMenuItems[0];
+    setStocktake((current) => ({
+      ...current,
+      lines: [
+        ...current.lines,
+        {
+          menuItemId: firstItem?.id ?? "",
+          countedQuantity: String(firstItem?.stockQuantity ?? 0),
+          note: "",
+        },
+      ],
+    }));
+  }
+
+  function removeStocktakeLine(index: number) {
+    setStocktake((current) => ({
+      ...current,
+      lines:
+        current.lines.length <= 1
+          ? current.lines
+          : current.lines.filter((_, lineIndex) => lineIndex !== index),
+    }));
+  }
+
+  async function submitStocktake(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await apiFetch("/v1/manage/operations/stocktakes", {
+        method: "POST",
+        body: JSON.stringify({
+          name: stocktake.name,
+          note: optional(stocktake.note),
+          countedAt: datetimeLocalToIso(stocktake.countedAt),
+          lines: stocktake.lines
+            .filter((line) => line.menuItemId)
+            .map((line) => ({
+              menuItemId: line.menuItemId,
+              countedQuantity: Number(line.countedQuantity || 0),
+              note: optional(line.note),
+            })),
+        }),
+      });
+      const firstItem = trackedMenuItems[0];
+      setStocktake({
+        ...initialStocktake,
+        lines: [
+          {
+            menuItemId: firstItem?.id ?? "",
+            countedQuantity: String(firstItem?.stockQuantity ?? 0),
+            note: "",
+          },
+        ],
+      });
+      setNotice("Stocktake applied.");
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -644,6 +780,156 @@ export default function ManageOperationsPage() {
               disabled={!adjustment.menuItemId || !adjustment.reason.trim()}
             >
               Save adjustment
+            </button>
+          </form>
+
+          <form
+            className="card grid"
+            onSubmit={(event) => void submitStocktake(event)}
+          >
+            <div className="row between">
+              <h2>Stocktake</h2>
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={addStocktakeLine}
+              >
+                Add line
+              </button>
+            </div>
+            <div className="grid two">
+              <label className="field">
+                <span>Name</span>
+                <input
+                  className="input"
+                  value={stocktake.name}
+                  placeholder="Daily count"
+                  onChange={(event) =>
+                    setStocktake((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Counted at</span>
+                <input
+                  className="input"
+                  type="datetime-local"
+                  value={stocktake.countedAt}
+                  onChange={(event) =>
+                    setStocktake((current) => ({
+                      ...current,
+                      countedAt: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <div className="operations-edit-list">
+              {stocktake.lines.map((line, index) => {
+                const item = trackedMenuItems.find(
+                  (entry) => entry.id === line.menuItemId,
+                );
+                return (
+                  <div
+                    className="operations-record-card"
+                    key={`${line.menuItemId}-${index}`}
+                  >
+                    <div className="operations-record-grid">
+                      <label className="field">
+                        <span>Menu item</span>
+                        <select
+                          className="select"
+                          value={line.menuItemId}
+                          onChange={(event) => {
+                            const nextItem = trackedMenuItems.find(
+                              (entry) => entry.id === event.target.value,
+                            );
+                            updateStocktakeLine(index, {
+                              menuItemId: event.target.value,
+                              countedQuantity: String(
+                                nextItem?.stockQuantity ?? 0,
+                              ),
+                            });
+                          }}
+                        >
+                          {trackedMenuItems.map((entry) => (
+                            <option value={entry.id} key={entry.id}>
+                              {entry.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Expected</span>
+                        <input
+                          className="input"
+                          value={stockLabel(item?.stockQuantity)}
+                          disabled
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Counted</span>
+                        <input
+                          className="input"
+                          inputMode="numeric"
+                          value={line.countedQuantity}
+                          onChange={(event) =>
+                            updateStocktakeLine(index, {
+                              countedQuantity: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Line note</span>
+                        <input
+                          className="input"
+                          value={line.note}
+                          onChange={(event) =>
+                            updateStocktakeLine(index, {
+                              note: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      disabled={stocktake.lines.length <= 1}
+                      onClick={() => removeStocktakeLine(index)}
+                    >
+                      Remove line
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <label className="field">
+              <span>Note</span>
+              <textarea
+                className="input textarea"
+                value={stocktake.note}
+                onChange={(event) =>
+                  setStocktake((current) => ({
+                    ...current,
+                    note: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <button
+              className="btn primary"
+              disabled={
+                !stocktake.name.trim() ||
+                trackedMenuItems.length === 0 ||
+                stocktake.lines.every((line) => !line.menuItemId)
+              }
+            >
+              Apply stocktake
             </button>
           </form>
 
@@ -1007,13 +1293,68 @@ export default function ManageOperationsPage() {
                     <strong>
                       {entry.menuItemName} {signed(entry.quantityDelta)}
                     </strong>
-                    <p>{entry.reason}</p>
+                    <p>
+                      {entry.reason}
+                      {entry.stocktakeName ? ` / ${entry.stocktakeName}` : ""}
+                    </p>
                   </div>
                   <span className="meta">
                     {formatDateTime(entry.createdAt)}
                   </span>
                 </div>
               ))}
+            </div>
+          </article>
+
+          <article className="card grid">
+            <h2>Stocktakes</h2>
+            <div className="operations-edit-list">
+              {(operations?.stocktakes ?? []).map((entry) => (
+                <div className="operations-record-card" key={entry.id}>
+                  <div className="row between">
+                    <div>
+                      <strong>{entry.name}</strong>
+                      <p>{entry.note || "Applied stock count"}</p>
+                    </div>
+                    <span className="status ok">{entry.status}</span>
+                  </div>
+                  <div className="row between">
+                    <span className="meta">
+                      Counted {formatDateTime(entry.countedAt)}
+                    </span>
+                    <span className="meta">{entry.lines.length} lines</span>
+                  </div>
+                  <div className="list compact-list">
+                    {entry.lines.slice(0, 5).map((line) => (
+                      <div className="row between" key={line.id}>
+                        <span>{line.menuItemName}</span>
+                        <span
+                          className={
+                            line.differenceQuantity === 0
+                              ? "status"
+                              : line.differenceQuantity > 0
+                                ? "status ok"
+                                : "status urgent"
+                          }
+                        >
+                          {line.expectedQuantity}
+                          {" -> "}
+                          {line.countedQuantity} (
+                          {signed(line.differenceQuantity)})
+                        </span>
+                      </div>
+                    ))}
+                    {entry.lines.length > 5 ? (
+                      <span className="meta">
+                        +{entry.lines.length - 5} more lines
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+              {operations?.stocktakes.length === 0 ? (
+                <span className="meta">No stocktakes yet.</span>
+              ) : null}
             </div>
           </article>
 
