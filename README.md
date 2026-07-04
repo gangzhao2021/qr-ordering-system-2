@@ -22,6 +22,7 @@ pnpm dev
 - Demo printer once: `pnpm printer:once`
 - Unit tests: `pnpm test`
 - P0 smoke against a running API: `pnpm smoke:p0`
+- P0 closeout checklist: `docs/P0_EXIT_CRITERIA.md`
 
 This repo includes `.npmrc` settings that use a hoisted/copy install strategy. That is slower than
 pnpm's default linker, but it avoids Windows link stalls observed during the initial setup.
@@ -34,6 +35,7 @@ set `API_BASE_URL` to target another port. The smoke uses demo staff accounts, t
 and the unlimited-stock Jasmine Tea item so it can be repeated without draining tracked stock.
 It also verifies the Kitchen role can read pending items but cannot mutate live FOH order state.
 The management P0 smoke cockpit includes the matching manual runbook for a pilot check.
+Use `docs/P0_EXIT_CRITERIA.md` as the canonical gate for deciding whether P0 is complete.
 
 `pnpm test` runs package unit tests for shared contracts, API auth/session helpers, and web
 request/component behavior. It does not start the database or browser.
