@@ -31,10 +31,18 @@ function waitStatusClass(minutes: number) {
   return "status ok";
 }
 
+function formatWaitDuration(minutes: number) {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
 function waitLabel(minutes: number) {
-  if (minutes >= 15) return `${minutes} min urgent`;
-  if (minutes >= 8) return `${minutes} min watch`;
-  return `${minutes} min`;
+  const duration = formatWaitDuration(minutes);
+  if (minutes >= 15) return `${duration} urgent`;
+  if (minutes >= 8) return `${duration} watch`;
+  return duration;
 }
 
 export default function KitchenPage() {
@@ -165,7 +173,7 @@ export default function KitchenPage() {
           </div>
           <div className="card metric-card">
             <span className="meta">Oldest wait</span>
-            <strong>{stats.oldestMinutes} min</strong>
+            <strong>{formatWaitDuration(stats.oldestMinutes)}</strong>
           </div>
         </section>
 
@@ -256,7 +264,9 @@ export default function KitchenPage() {
                             <strong>Table {table.tableNumber}</strong>
                             <span>
                               {table.quantity}x /{" "}
-                              {waitMinutes(table.earliestSubmittedAt)} min
+                              {formatWaitDuration(
+                                waitMinutes(table.earliestSubmittedAt),
+                              )}
                             </span>
                           </div>
                         ))}

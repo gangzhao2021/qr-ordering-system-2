@@ -680,6 +680,11 @@ textarea {
   width: 100%;
 }
 
+.foh-no-checkout {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
 .settings-tax-rules {
   border-top: 1px solid var(--line);
   padding-top: 16px;

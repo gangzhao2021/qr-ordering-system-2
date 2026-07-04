@@ -608,13 +608,19 @@ export default function FohPage() {
                         </div>
                       ) : null}
 
-                      <button
-                        className="btn primary foh-close-button"
-                        disabled={!canCheckout}
-                        onClick={() => void checkout(table)}
-                      >
-                        Take payment and close
-                      </button>
+                      {table.openTotalCents > 0 ? (
+                        <button
+                          className="btn primary foh-close-button"
+                          disabled={!canCheckout}
+                          onClick={() => void checkout(table)}
+                        >
+                          {canCheckout
+                            ? "Take payment and close"
+                            : "Finish pending dishes first"}
+                        </button>
+                      ) : (
+                        <p className="meta foh-no-checkout">No open check.</p>
+                      )}
                     </article>
                   );
                 })}
@@ -672,13 +678,18 @@ export default function FohPage() {
                     <span>
                       {job.type} / Table {job.tableNumber ?? "-"} / {job.status}
                     </span>
-                    {job.orderId ? (
+                    {job.orderId &&
+                    job.status !== "PENDING" &&
+                    job.status !== "PRINTING" ? (
                       <button
                         className="btn ghost"
                         onClick={() => void reprint(job.orderId!)}
                       >
                         Reprint
                       </button>
+                    ) : job.status === "PENDING" ||
+                      job.status === "PRINTING" ? (
+                      <span className="status checkout">Waiting</span>
                     ) : null}
                   </div>
                 ))}
