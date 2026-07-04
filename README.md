@@ -32,6 +32,7 @@ database commands or starting the API.
 `pnpm smoke:p0` expects the API to be running. It defaults to `http://127.0.0.1:3001`;
 set `API_BASE_URL` to target another port. The smoke uses demo staff accounts, table 8,
 and the unlimited-stock Jasmine Tea item so it can be repeated without draining tracked stock.
+It also verifies the Kitchen role can read pending items but cannot mutate live FOH order state.
 
 `pnpm test` runs package unit tests for shared contracts, API auth/session helpers, and web
 request/component behavior. It does not start the database or browser.

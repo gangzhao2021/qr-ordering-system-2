@@ -32,6 +32,28 @@ async function request(path, options = {}) {
   return { response, body };
 }
 
+async function requestDenied(path, expectedStatus, options = {}) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...options,
+    headers: {
+      "content-type": "application/json",
+      ...(options.cookie ? { cookie: options.cookie } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+  const text = await response.text();
+  const body = text ? JSON.parse(text) : null;
+  if (response.status !== expectedStatus) {
+    const message = body?.error?.message ?? response.statusText;
+    throw new Error(
+      `${options.method ?? "GET"} ${path} expected ${expectedStatus}, got ${
+        response.status
+      }: ${message}`,
+    );
+  }
+  return { response, body };
+}
+
 async function login(email) {
   const { response, body } = await request("/v1/auth/login", {
     method: "POST",
@@ -166,23 +188,57 @@ async function main() {
     cookie: kitchen.cookie,
   });
   assert(
-    kitchenItems.body.items.some((item) => item.menuItemId === menuItem.id),
-    "created order item missing from kitchen pending list",
+    kitchenItems.body.items.some(
+      (item) =>
+        item.menuItemId === menuItem.id &&
+        item.tables.some((table) => table.tableId === tableId),
+    ),
+    "created order item missing from kitchen pending list for the table",
   );
 
   const firstFohTables = await request("/v1/foh/tables", {
     cookie: foh.cookie,
   });
   const firstFohTable = findTable(firstFohTables.body, tableId);
-  assert(
-    firstFohTable.pendingItems.some((item) => item.orderId === orderId),
-    "created order item missing from FOH table",
+  const createdPendingItem = firstFohTable.pendingItems.find(
+    (item) => item.orderId === orderId,
   );
+  assert(createdPendingItem, "created order item missing from FOH table");
   assert(
     firstFohTable.serviceRequests.some(
       (request) => request.id === serviceRequest.body.id,
     ),
     "created service request missing from FOH table",
+  );
+
+  await requestDenied(
+    `/v1/foh/order-items/${encodeURIComponent(createdPendingItem.id)}/status`,
+    403,
+    {
+      method: "PATCH",
+      cookie: kitchen.cookie,
+      body: JSON.stringify({ status: "DONE" }),
+    },
+  );
+  await requestDenied(
+    `/v1/foh/tables/${encodeURIComponent(tableId)}/checkout`,
+    403,
+    {
+      method: "POST",
+      cookie: kitchen.cookie,
+      body: JSON.stringify({ paymentMethod: "CARD" }),
+    },
+  );
+
+  const afterKitchenDenied = await request("/v1/foh/tables", {
+    cookie: foh.cookie,
+  });
+  const deniedFohTable = findTable(afterKitchenDenied.body, tableId);
+  assert(
+    deniedFohTable.pendingItems.some(
+      (item) => item.id === createdPendingItem.id && item.status === "PENDING",
+    ),
+    "kitchen role changed a live order item through a FOH mutation route",
   );
 
   const printJobs = await request("/v1/foh/print-jobs", { cookie: foh.cookie });
