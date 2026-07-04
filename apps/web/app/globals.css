@@ -737,6 +737,69 @@ textarea {
   grid-column: 1 / -1;
 }
 
+.smoke-page {
+  max-width: 1280px;
+}
+
+.smoke-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.smoke-hero h2 {
+  margin: 4px 0;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.smoke-summary,
+.smoke-main,
+.smoke-stage-grid {
+  margin-top: 16px;
+}
+
+.smoke-demo,
+.smoke-routes,
+.smoke-stage {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.smoke-route-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.smoke-route-grid .link-btn {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.smoke-route-grid span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.smoke-check-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.smoke-check-row p {
+  margin-top: 6px;
+}
+
 .bar-list {
   display: grid;
   gap: 10px;
@@ -1216,7 +1279,8 @@ textarea {
   }
 
   .foh-header,
-  .foh-table-total {
+  .foh-table-total,
+  .smoke-hero {
     align-items: stretch;
     flex-direction: column;
   }
@@ -1266,6 +1330,10 @@ textarea {
 
   .kitchen-ticket-quantity {
     justify-items: start;
+  }
+
+  .smoke-check-row {
+    grid-template-columns: 1fr;
   }
 
   .menu-item,

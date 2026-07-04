@@ -22,6 +22,7 @@ import {
   getManageAnalytics,
   getManageOperations,
   getManageMenu,
+  getP0SmokeCockpit,
   getFohPrintJobs,
   getManageStaff,
   getManageTables,
@@ -225,6 +226,14 @@ manageRouter.get("/analytics", async (req, res, next) => {
 manageRouter.get("/operations", async (_req, res, next) => {
   try {
     res.json(await getManageOperations());
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.get("/p0-smoke", async (_req, res, next) => {
+  try {
+    res.json(await getP0SmokeCockpit());
   } catch (error) {
     next(error);
   }

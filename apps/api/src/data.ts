@@ -40,6 +40,9 @@ import type {
   PaymentMethod,
   PaymentMethodOption,
   PaymentsResponse,
+  P0SmokeCockpitResponse,
+  P0SmokeCheck,
+  P0SmokeStatus,
   PrintJob,
   RefundPaymentRequest,
   ServiceRequest,
@@ -1912,6 +1915,313 @@ export async function getManageOperations(): Promise<ManageOperationsResponse> {
     coupons: coupons.map(mapCoupon),
     kdsDevices: kdsDevices.map(mapKdsDevice),
     auditLogs: auditLogs.map(mapAuditLog),
+  };
+}
+
+function smokeCheck(
+  id: string,
+  label: string,
+  status: P0SmokeStatus,
+  detail: string,
+  href?: string,
+): P0SmokeCheck {
+  return { id, label, status, detail, ...(href ? { href } : {}) };
+}
+
+function smokeOverall(checks: P0SmokeCheck[]): P0SmokeStatus {
+  if (checks.some((check) => check.status === "NEEDS_SETUP")) {
+    return "NEEDS_SETUP";
+  }
+  if (checks.some((check) => check.status === "WATCH")) {
+    return "WATCH";
+  }
+  return "READY";
+}
+
+export async function getP0SmokeCockpit(): Promise<P0SmokeCockpitResponse> {
+  const store = await getDefaultStore();
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setUTCDate(oneWeekAgo.getUTCDate() - 7);
+
+  const availableItemWhere = {
+    storeId: store.id,
+    isAvailable: true,
+    OR: [{ stockQuantity: null }, { stockQuantity: { gt: 0 } }],
+  };
+
+  const [
+    tables,
+    categoryCount,
+    menuItemCount,
+    availableItemCount,
+    demoItem,
+    openOrderTableRows,
+    pendingKitchenItems,
+    pendingServiceRequests,
+    serviceRequestTableRows,
+    printJobStatusRows,
+    recentPayments,
+    activeRoleRows,
+    supplierCount,
+    kdsDeviceCount,
+    auditLogCount,
+  ] = await Promise.all([
+    prisma.diningTable.findMany({
+      where: { storeId: store.id },
+      orderBy: [{ number: "asc" }, { createdAt: "asc" }],
+    }),
+    prisma.menuCategory.count({ where: { storeId: store.id } }),
+    prisma.menuItem.count({ where: { storeId: store.id } }),
+    prisma.menuItem.count({ where: availableItemWhere }),
+    prisma.menuItem.findFirst({
+      where: availableItemWhere,
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: { id: true, name: true, priceCents: true },
+    }),
+    prisma.order.groupBy({
+      by: ["tableId"],
+      where: { storeId: store.id, status: "SUBMITTED" },
+    }),
+    prisma.orderItem.count({
+      where: {
+        status: "PENDING",
+        order: { storeId: store.id, status: "SUBMITTED" },
+      },
+    }),
+    prisma.serviceRequest.count({
+      where: { storeId: store.id, status: "PENDING" },
+    }),
+    prisma.serviceRequest.groupBy({
+      by: ["tableId"],
+      where: { storeId: store.id, status: "PENDING" },
+    }),
+    prisma.printJob.groupBy({
+      by: ["status"],
+      where: { storeId: store.id },
+      _count: { _all: true },
+    }),
+    prisma.payment.count({
+      where: { storeId: store.id, paidAt: { gte: oneWeekAgo } },
+    }),
+    prisma.user.groupBy({
+      by: ["role"],
+      where: { storeId: store.id, isActive: true },
+      _count: { _all: true },
+    }),
+    prisma.supplier.count({ where: { storeId: store.id, isActive: true } }),
+    prisma.kdsDevice.count({ where: { storeId: store.id, isActive: true } }),
+    prisma.auditLog.count({ where: { storeId: store.id } }),
+  ]);
+
+  const activeTables = tables.filter((table) => table.isActive);
+  const demoTable = activeTables[0] ? mapTable(activeTables[0]) : null;
+  const openTableIds = new Set(openOrderTableRows.map((row) => row.tableId));
+  for (const row of serviceRequestTableRows) {
+    openTableIds.add(row.tableId);
+  }
+
+  const printJobCounts = Object.fromEntries(
+    printJobStatusRows.map((row) => [row.status, row._count._all]),
+  ) as Partial<Record<PrintJob["status"], number>>;
+  const pendingPrintJobs =
+    (printJobCounts.PENDING ?? 0) + (printJobCounts.PRINTING ?? 0);
+  const failedPrintJobs = printJobCounts.FAILED ?? 0;
+
+  const roleCounts = Object.fromEntries(
+    activeRoleRows.map((row) => [row.role, row._count._all]),
+  ) as Partial<Record<(typeof STAFF_ROLES)[number], number>>;
+  const managerCount = (roleCounts.ADMIN ?? 0) + (roleCounts.DEV ?? 0);
+  const paymentMethodCount = paymentMethods(store.enabledPaymentMethods).length;
+  const checks = {
+    customer: [
+      smokeCheck(
+        "customer-table",
+        "QR table entry",
+        activeTables.length > 0 ? "READY" : "NEEDS_SETUP",
+        activeTables.length > 0
+          ? `${activeTables.length} active table QR entries`
+          : "No active tables",
+        "/manage/tables",
+      ),
+      smokeCheck(
+        "customer-menu",
+        "Orderable menu",
+        availableItemCount > 0 ? "READY" : "NEEDS_SETUP",
+        `${availableItemCount} available items across ${categoryCount} categories`,
+        "/manage/menu",
+      ),
+      smokeCheck(
+        "customer-status",
+        "Table status view",
+        activeTables.length > 0 ? "READY" : "NEEDS_SETUP",
+        "Customer order status is token scoped",
+        demoTable ? `/c?t=${encodeURIComponent(demoTable.qrToken)}` : "/c",
+      ),
+      smokeCheck(
+        "customer-service",
+        "Service requests",
+        activeTables.length > 0 ? "READY" : "NEEDS_SETUP",
+        pendingServiceRequests > 0
+          ? `${pendingServiceRequests} pending requests visible to FOH`
+          : "Water, call staff, and follow-up requests are available",
+        "/foh",
+      ),
+    ],
+    foh: [
+      smokeCheck(
+        "foh-access",
+        "FOH access",
+        (roleCounts.FOH ?? 0) > 0 ? "READY" : "NEEDS_SETUP",
+        `${roleCounts.FOH ?? 0} active FOH accounts`,
+        "/manage/staff",
+      ),
+      smokeCheck(
+        "foh-board",
+        "Live table board",
+        openTableIds.size > 0 ? "WATCH" : "READY",
+        openTableIds.size > 0
+          ? `${openTableIds.size} tables need FOH attention`
+          : "No open table work right now",
+        "/foh",
+      ),
+      smokeCheck(
+        "foh-checkout",
+        "Checkout methods",
+        paymentMethodCount > 0 ? "READY" : "NEEDS_SETUP",
+        `${paymentMethodCount} payment methods enabled`,
+        "/manage/settings",
+      ),
+      smokeCheck(
+        "foh-payments",
+        "Payments and refunds",
+        "READY",
+        `${recentPayments} payments recorded in the last 7 days`,
+        "/foh",
+      ),
+    ],
+    kitchenPrinter: [
+      smokeCheck(
+        "kitchen-access",
+        "Kitchen read-only access",
+        (roleCounts.KITCHEN ?? 0) > 0 ? "READY" : "NEEDS_SETUP",
+        `${roleCounts.KITCHEN ?? 0} active kitchen accounts`,
+        "/manage/staff",
+      ),
+      smokeCheck(
+        "kitchen-items",
+        "Pending kitchen items",
+        pendingKitchenItems > 0 ? "WATCH" : "READY",
+        pendingKitchenItems > 0
+          ? `${pendingKitchenItems} pending items on kitchen board`
+          : "Kitchen board is clear",
+        "/kitchen",
+      ),
+      smokeCheck(
+        "printer-account",
+        "Printer service account",
+        (roleCounts.PRINTER ?? 0) > 0 ? "READY" : "NEEDS_SETUP",
+        `${roleCounts.PRINTER ?? 0} active printer accounts`,
+        "/manage/staff",
+      ),
+      smokeCheck(
+        "printer-queue",
+        "Ticket queue",
+        failedPrintJobs > 0
+          ? "NEEDS_SETUP"
+          : pendingPrintJobs > 0
+            ? "WATCH"
+            : "READY",
+        failedPrintJobs > 0
+          ? `${failedPrintJobs} failed print jobs`
+          : pendingPrintJobs > 0
+            ? `${pendingPrintJobs} jobs waiting or printing`
+            : "No blocked print jobs",
+        "/manage/print-jobs",
+      ),
+    ],
+    management: [
+      smokeCheck(
+        "management-access",
+        "Manager access",
+        managerCount > 0 ? "READY" : "NEEDS_SETUP",
+        `${managerCount} active admin/dev managers`,
+        "/manage/staff",
+      ),
+      smokeCheck(
+        "management-menu",
+        "Menu management",
+        menuItemCount > 0 && categoryCount > 0 ? "READY" : "NEEDS_SETUP",
+        `${menuItemCount} menu items in ${categoryCount} categories`,
+        "/manage/menu",
+      ),
+      smokeCheck(
+        "management-tables",
+        "Tables and QR cards",
+        activeTables.length > 0 ? "READY" : "NEEDS_SETUP",
+        `${activeTables.length}/${tables.length} tables active`,
+        "/manage/tables",
+      ),
+      smokeCheck(
+        "management-ops",
+        "Operations records",
+        supplierCount > 0 || kdsDeviceCount > 0 || auditLogCount > 0
+          ? "READY"
+          : "WATCH",
+        `${supplierCount} suppliers, ${kdsDeviceCount} KDS devices, ${auditLogCount} audit entries`,
+        "/manage/operations",
+      ),
+    ],
+  };
+
+  const allChecks = Object.values(checks).flat();
+
+  return {
+    store: mapStore(store),
+    generatedAt: new Date().toISOString(),
+    overallStatus: smokeOverall(allChecks),
+    summary: {
+      activeTables: activeTables.length,
+      availableItems: availableItemCount,
+      openTables: openTableIds.size,
+      pendingKitchenItems,
+      pendingServiceRequests,
+      pendingPrintJobs,
+      failedPrintJobs,
+      recentPayments,
+    },
+    demo: {
+      table: demoTable,
+      customerPath: demoTable
+        ? `/c?t=${encodeURIComponent(demoTable.qrToken)}`
+        : null,
+      item: demoItem,
+    },
+    stages: [
+      { id: "customer", title: "Customer QR flow", checks: checks.customer },
+      { id: "foh", title: "FOH operating loop", checks: checks.foh },
+      {
+        id: "kitchen-printer",
+        title: "Kitchen and printer handoff",
+        checks: checks.kitchenPrinter,
+      },
+      {
+        id: "management",
+        title: "Management readiness",
+        checks: checks.management,
+      },
+    ],
+    routes: [
+      {
+        label: "Customer menu",
+        href: demoTable ? `/c?t=${demoTable.qrToken}` : "/c",
+        role: "CUSTOMER",
+      },
+      { label: "FOH board", href: "/foh", role: "FOH" },
+      { label: "Kitchen board", href: "/kitchen", role: "KITCHEN" },
+      { label: "Print jobs", href: "/manage/print-jobs", role: "ADMIN" },
+      { label: "Menu setup", href: "/manage/menu", role: "ADMIN" },
+      { label: "Tables and QR", href: "/manage/tables", role: "ADMIN" },
+    ],
   };
 }
 

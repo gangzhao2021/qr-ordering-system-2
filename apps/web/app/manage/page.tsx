@@ -9,6 +9,11 @@ import {
 
 const links = [
   {
+    href: "/manage/p0-smoke",
+    title: "P0 smoke cockpit",
+    body: "End-to-end readiness for QR ordering, FOH, kitchen, printer, and management.",
+  },
+  {
     href: "/manage/settings",
     title: "Store settings",
     body: "Currency, receipt identity, tax, and service charge.",

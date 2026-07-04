@@ -606,6 +606,54 @@ export type ManageOperationsResponse = {
   auditLogs: AuditLog[];
 };
 
+export const P0_SMOKE_STATUSES = ["READY", "WATCH", "NEEDS_SETUP"] as const;
+export type P0SmokeStatus = (typeof P0_SMOKE_STATUSES)[number];
+
+export type P0SmokeCheck = {
+  id: string;
+  label: string;
+  status: P0SmokeStatus;
+  detail: string;
+  href?: string;
+};
+
+export type P0SmokeStage = {
+  id: string;
+  title: string;
+  checks: P0SmokeCheck[];
+};
+
+export type P0SmokeCockpitResponse = {
+  store: StoreSummary;
+  generatedAt: string;
+  overallStatus: P0SmokeStatus;
+  summary: {
+    activeTables: number;
+    availableItems: number;
+    openTables: number;
+    pendingKitchenItems: number;
+    pendingServiceRequests: number;
+    pendingPrintJobs: number;
+    failedPrintJobs: number;
+    recentPayments: number;
+  };
+  demo: {
+    table?: DiningTable | null;
+    customerPath?: string | null;
+    item?: {
+      id: string;
+      name: string;
+      priceCents: number;
+    } | null;
+  };
+  stages: P0SmokeStage[];
+  routes: Array<{
+    label: string;
+    href: string;
+    role: "CUSTOMER" | StaffRole;
+  }>;
+};
+
 export type CreateSupplierRequest = Pick<
   Supplier,
   "name" | "contactName" | "phone" | "email" | "notes"
