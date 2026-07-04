@@ -563,6 +563,145 @@ textarea {
   width: 100%;
 }
 
+.kitchen-page {
+  max-width: 1320px;
+}
+
+.kitchen-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.kitchen-refresh {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kitchen-message {
+  margin-bottom: 16px;
+}
+
+.kitchen-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.kitchen-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.kitchen-station-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.kitchen-board {
+  display: grid;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.kitchen-empty {
+  display: grid;
+  gap: 6px;
+}
+
+.kitchen-station-section {
+  display: grid;
+  gap: 12px;
+}
+
+.kitchen-station-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kitchen-station-header h2,
+.kitchen-ticket h3 {
+  margin: 0;
+}
+
+.kitchen-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.kitchen-ticket {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 228px;
+}
+
+.kitchen-ticket-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kitchen-ticket-head h3 {
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.kitchen-ticket-quantity {
+  display: grid;
+  justify-items: center;
+  min-width: 64px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafaf8;
+  padding: 8px 10px;
+}
+
+.kitchen-ticket-quantity strong {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.kitchen-ticket-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.kitchen-table-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kitchen-table-chip {
+  display: grid;
+  gap: 2px;
+  min-width: 112px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.kitchen-table-chip span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .analytics-range {
   min-width: 150px;
 }
@@ -964,6 +1103,28 @@ textarea {
   .foh-action-buttons,
   .foh-action-buttons .btn {
     width: 100%;
+  }
+
+  .kitchen-header,
+  .kitchen-toolbar,
+  .kitchen-station-header,
+  .kitchen-ticket-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kitchen-refresh,
+  .kitchen-station-tabs {
+    justify-content: flex-start;
+  }
+
+  .kitchen-metric-grid,
+  .kitchen-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kitchen-ticket-quantity {
+    justify-items: start;
   }
 
   .menu-item,

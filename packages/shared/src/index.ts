@@ -481,6 +481,13 @@ export type KitchenPendingItem = {
   kitchenStation: string;
   quantity: number;
   earliestSubmittedAt: string;
+  tables: Array<{
+    tableId: string;
+    tableNumber: string;
+    tableName?: string | null;
+    quantity: number;
+    earliestSubmittedAt: string;
+  }>;
 };
 
 export type KitchenPendingResponse = {

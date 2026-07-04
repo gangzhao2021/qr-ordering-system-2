@@ -1565,7 +1565,12 @@ export async function getKitchenPendingItems() {
     },
     include: {
       order: {
-        select: { submittedAt: true },
+        select: {
+          submittedAt: true,
+          table: {
+            select: { id: true, number: true, name: true },
+          },
+        },
       },
       menuItem: {
         select: { kitchenStation: true },
@@ -1587,16 +1592,49 @@ export async function getKitchenPendingItems() {
         kitchenStation,
         quantity: item.quantity,
         earliestSubmittedAt,
+        tables: [
+          {
+            tableId: item.order.table.id,
+            tableNumber: item.order.table.number,
+            tableName: item.order.table.name,
+            quantity: item.quantity,
+            earliestSubmittedAt,
+          },
+        ],
       });
     } else {
       existing.quantity += item.quantity;
       if (earliestSubmittedAt < existing.earliestSubmittedAt) {
         existing.earliestSubmittedAt = earliestSubmittedAt;
       }
+      const tableEntry = existing.tables.find(
+        (entry) => entry.tableId === item.order.table.id,
+      );
+      if (tableEntry) {
+        tableEntry.quantity += item.quantity;
+        if (earliestSubmittedAt < tableEntry.earliestSubmittedAt) {
+          tableEntry.earliestSubmittedAt = earliestSubmittedAt;
+        }
+      } else {
+        existing.tables.push({
+          tableId: item.order.table.id,
+          tableNumber: item.order.table.number,
+          tableName: item.order.table.name,
+          quantity: item.quantity,
+          earliestSubmittedAt,
+        });
+      }
     }
   }
 
-  return { store: mapStore(store), items: Array.from(grouped.values()) };
+  const items = Array.from(grouped.values()).map((item) => ({
+    ...item,
+    tables: item.tables.sort((a, b) =>
+      a.earliestSubmittedAt.localeCompare(b.earliestSubmittedAt),
+    ),
+  }));
+
+  return { store: mapStore(store), items };
 }
 
 export async function getManageMenu() {
