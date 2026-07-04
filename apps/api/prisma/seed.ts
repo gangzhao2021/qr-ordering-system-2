@@ -161,7 +161,7 @@ const menuItems = [
       "zh-CN": "爽脆黄瓜、黑醋、辣椒油",
     },
     imageUrl:
-      "https://images.unsplash.com/photo-1604908177522-402a5f3f8d7d?auto=format&fit=crop&w=640&q=80",
+      "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=640&q=80",
     allergens: ["Soy"],
     spiceLevel: 1,
     taxCategory: "PREPARED_FOOD",

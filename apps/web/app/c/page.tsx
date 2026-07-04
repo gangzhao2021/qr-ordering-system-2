@@ -22,6 +22,7 @@ type CartLine = {
   modifiers: SelectedModifier[];
   note: string;
   quantity: number;
+  maxQuantity: number;
 };
 
 const labels = {
@@ -29,11 +30,15 @@ const labels = {
     entryTitle: "Customer entry",
     entryBody:
       "Scan a table QR code or enter a table token to open the right dine-in menu.",
+    tableToken: "Table token",
+    tableTokenHelp: "Ask staff if the QR code is damaged or missing.",
     openMenu: "Open menu",
     search: "Search menu",
+    searchPlaceholder: "Noodles, dumplings, tea",
     water: "Water",
     callStaff: "Call staff",
     followUp: "Follow up",
+    serviceHelp: "Need help at the table? FOH sees these requests live.",
     tableStatus: "Table status",
     serviceRequests: "Service requests",
     orders: "Orders",
@@ -49,6 +54,51 @@ const labels = {
     viewStatus: "View table status",
     menu: "Menu",
     tableSummary: "Table summary",
+    tableStep: "Table",
+    menuStep: "Menu",
+    cartStep: "Cart",
+    statusStep: "Status",
+    orderingSteps: "Ordering steps",
+    tableReady: "Table ready",
+    dineIn: "Dine-in",
+    browsePrompt:
+      "Choose items, review your cart, then send the order to the front desk.",
+    loadingMenu: "Loading menu...",
+    categoryTabs: "Menu sections",
+    allCategories: "All sections",
+    emptyMenuTitle: "No matching items",
+    emptyMenuBody: "Clear the search or try another dish name.",
+    clearSearch: "Clear search",
+    itemSingular: "item",
+    itemPlural: "items",
+    none: "None",
+    selectedInCart: "in cart",
+    spice: "Spice",
+    allergens: "Allergens",
+    cartTitle: "Review cart",
+    cartHelp: "Adjust quantities before sending this table order.",
+    decrease: "Decrease",
+    increase: "Increase",
+    remove: "Remove",
+    noServiceRequests: "No service requests yet.",
+    noOrders: "No orders yet.",
+    orderLabel: "Order",
+    total: "Total",
+    subtotal: "Subtotal",
+    serviceCharge: "Service charge",
+    includedTax: "Included tax",
+    orderSent: "Order sent",
+    requestSent: "Request sent to FOH",
+    statusSummary: "open / request",
+    openStatus: "Open",
+    closedStatus: "Closed",
+    canceledStatus: "Canceled",
+    inProgressStatus: "In progress",
+    servedStatus: "Served",
+    pendingStatus: "Pending",
+    handledStatus: "Handled",
+    stockLeft: "{count} left",
+    stockIn: "{count} in stock",
     soldOut: "Sold out",
     unavailable: "Unavailable",
     available: "Available",
@@ -56,11 +106,15 @@ const labels = {
   "fr-CA": {
     entryTitle: "Entree client",
     entryBody: "Scannez le code QR de la table ou entrez un jeton de table.",
+    tableToken: "Jeton de table",
+    tableTokenHelp: "Demandez a l'equipe si le code QR est abime ou absent.",
     openMenu: "Ouvrir le menu",
     search: "Rechercher",
+    searchPlaceholder: "Nouilles, raviolis, the",
     water: "Eau",
     callStaff: "Appeler",
     followUp: "Relancer",
+    serviceHelp: "Besoin d'aide a table? L'equipe voit ces demandes.",
     tableStatus: "Etat de la table",
     serviceRequests: "Demandes",
     orders: "Commandes",
@@ -76,6 +130,51 @@ const labels = {
     viewStatus: "Voir la table",
     menu: "Menu",
     tableSummary: "Resume de table",
+    tableStep: "Table",
+    menuStep: "Menu",
+    cartStep: "Panier",
+    statusStep: "Suivi",
+    orderingSteps: "Etapes de commande",
+    tableReady: "Table prete",
+    dineIn: "Sur place",
+    browsePrompt:
+      "Choisissez vos plats, verifiez le panier, puis envoyez la commande.",
+    loadingMenu: "Chargement du menu...",
+    categoryTabs: "Sections du menu",
+    allCategories: "Toutes les sections",
+    emptyMenuTitle: "Aucun article trouve",
+    emptyMenuBody: "Effacez la recherche ou essayez un autre plat.",
+    clearSearch: "Effacer",
+    itemSingular: "article",
+    itemPlural: "articles",
+    none: "Aucun",
+    selectedInCart: "au panier",
+    spice: "Piquant",
+    allergens: "Allergenes",
+    cartTitle: "Verifier le panier",
+    cartHelp: "Ajustez les quantites avant d'envoyer la commande.",
+    decrease: "Diminuer",
+    increase: "Augmenter",
+    remove: "Retirer",
+    noServiceRequests: "Aucune demande pour le moment.",
+    noOrders: "Aucune commande pour le moment.",
+    orderLabel: "Commande",
+    total: "Total",
+    subtotal: "Sous-total",
+    serviceCharge: "Frais de service",
+    includedTax: "Taxe incluse",
+    orderSent: "Commande envoyee",
+    requestSent: "Demande envoyee a l'equipe",
+    statusSummary: "ouvert / demande",
+    openStatus: "Ouverte",
+    closedStatus: "Fermee",
+    canceledStatus: "Annulee",
+    inProgressStatus: "En cours",
+    servedStatus: "Servi",
+    pendingStatus: "En attente",
+    handledStatus: "Traitee",
+    stockLeft: "{count} restants",
+    stockIn: "{count} en stock",
     soldOut: "Epuise",
     unavailable: "Indisponible",
     available: "Disponible",
@@ -83,11 +182,15 @@ const labels = {
   "zh-CN": {
     entryTitle: "顾客入口",
     entryBody: "扫描桌台二维码，或输入桌台 token 打开堂食菜单。",
+    tableToken: "桌台 token",
+    tableTokenHelp: "如果二维码损坏或缺失，请联系服务员。",
     openMenu: "打开菜单",
     search: "搜索菜单",
+    searchPlaceholder: "牛肉面、水饺、茶",
     water: "加水",
     callStaff: "呼叫服务员",
     followUp: "催单",
+    serviceHelp: "需要帮助时可直接呼叫，前厅会看到请求。",
     tableStatus: "桌台状态",
     serviceRequests: "服务请求",
     orders: "订单",
@@ -103,6 +206,50 @@ const labels = {
     viewStatus: "查看桌台状态",
     menu: "菜单",
     tableSummary: "桌台概览",
+    tableStep: "桌台",
+    menuStep: "菜单",
+    cartStep: "购物车",
+    statusStep: "状态",
+    orderingSteps: "点餐步骤",
+    tableReady: "桌台已确认",
+    dineIn: "堂食",
+    browsePrompt: "选择菜品，确认购物车，然后提交给前厅。",
+    loadingMenu: "菜单加载中...",
+    categoryTabs: "菜单分类",
+    allCategories: "全部分类",
+    emptyMenuTitle: "没有匹配菜品",
+    emptyMenuBody: "清空搜索，或换一个菜名试试。",
+    clearSearch: "清空搜索",
+    itemSingular: "项",
+    itemPlural: "项",
+    none: "无",
+    selectedInCart: "已加入",
+    spice: "辣度",
+    allergens: "过敏原",
+    cartTitle: "确认购物车",
+    cartHelp: "提交前可调整数量。",
+    decrease: "减少",
+    increase: "增加",
+    remove: "移除",
+    noServiceRequests: "暂无服务请求。",
+    noOrders: "暂无订单。",
+    orderLabel: "订单",
+    total: "合计",
+    subtotal: "小计",
+    serviceCharge: "服务费",
+    includedTax: "已含税",
+    orderSent: "订单已提交",
+    requestSent: "已通知前厅",
+    statusSummary: "进行中 / 请求",
+    openStatus: "进行中",
+    closedStatus: "已结账",
+    canceledStatus: "已取消",
+    inProgressStatus: "制作中",
+    servedStatus: "已上菜",
+    pendingStatus: "待处理",
+    handledStatus: "已处理",
+    stockLeft: "剩余 {count}",
+    stockIn: "库存 {count}",
     soldOut: "售罄",
     unavailable: "不可售",
     available: "可点",
@@ -123,28 +270,54 @@ function modifierName(modifier: SelectedModifier) {
     : modifier.name;
 }
 
+function fillCount(template: string, count: number) {
+  return template.replace("{count}", String(count));
+}
+
+function countLabel(
+  count: number,
+  singular: string,
+  plural: string,
+  language: LanguageCode,
+) {
+  if (language === "zh-CN") return `${count} ${plural}`;
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function sectionId(categoryId: string) {
+  return `category-${categoryId}`;
+}
+
 function stockLabel(item: MenuItem, language: LanguageCode) {
   const t = labels[language];
   if (!item.isAvailable) return t.unavailable;
   if (item.isSoldOut) return t.soldOut;
   if (item.stockQuantity !== null && item.stockQuantity !== undefined) {
     return item.isLowStock
-      ? `${item.stockQuantity} left`
-      : `${item.stockQuantity} in stock`;
+      ? fillCount(t.stockLeft, item.stockQuantity)
+      : fillCount(t.stockIn, item.stockQuantity);
   }
   return t.available;
 }
 
-function orderStatusLabel(status: CustomerOrder["status"]) {
-  if (status === "SUBMITTED") return "Open";
-  if (status === "CLOSED") return "Closed";
-  return "Canceled";
+function orderStatusLabel(
+  status: CustomerOrder["status"],
+  language: LanguageCode,
+) {
+  const t = labels[language];
+  if (status === "SUBMITTED") return t.openStatus;
+  if (status === "CLOSED") return t.closedStatus;
+  return t.canceledStatus;
 }
 
-function itemStatusLabel(status: CustomerOrder["items"][number]["status"]) {
-  if (status === "PENDING") return "In progress";
-  if (status === "DONE") return "Served";
-  return "Canceled";
+function itemStatusLabel(
+  status: CustomerOrder["items"][number]["status"],
+  language: LanguageCode,
+) {
+  const t = labels[language];
+  if (status === "PENDING") return t.inProgressStatus;
+  if (status === "DONE") return t.servedStatus;
+  return t.canceledStatus;
 }
 
 function requestTypeLabel(
@@ -157,10 +330,14 @@ function requestTypeLabel(
   return t.followUp;
 }
 
-function requestStatusLabel(status: ServiceRequest["status"]) {
-  if (status === "PENDING") return "Pending";
-  if (status === "HANDLED") return "Handled";
-  return "Canceled";
+function requestStatusLabel(
+  status: ServiceRequest["status"],
+  language: LanguageCode,
+) {
+  const t = labels[language];
+  if (status === "PENDING") return t.pendingStatus;
+  if (status === "HANDLED") return t.handledStatus;
+  return t.canceledStatus;
 }
 
 function CustomerExperience() {
@@ -206,6 +383,21 @@ function CustomerExperience() {
     setOrders(result);
   }
 
+  function handleLanguageChange(nextLanguage: LanguageCode) {
+    setLanguage(nextLanguage);
+    if (!qrToken) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("lang", nextLanguage);
+    router.replace(`/c?${params.toString()}`, { scroll: false });
+  }
+
+  function openManualMenu() {
+    const token = manualToken.trim();
+    if (!token) return;
+    const params = new URLSearchParams({ t: token, lang: language });
+    router.push(`/c?${params.toString()}`);
+  }
+
   useEffect(() => {
     const requestedLanguage = searchParams.get("lang");
     if (LANGUAGE_CODES.includes(requestedLanguage as LanguageCode)) {
@@ -243,6 +435,16 @@ function CustomerExperience() {
       }))
       .filter((category) => category.items.length > 0);
   }, [menu, query, language]);
+
+  const visibleItemCount = filteredCategories.reduce(
+    (sum, category) => sum + category.items.length,
+    0,
+  );
+  const totalMenuItemCount =
+    menu?.categories.reduce(
+      (sum, category) => sum + category.items.length,
+      0,
+    ) ?? 0;
 
   function selectedModifiers(item: MenuItem): SelectedModifier[] {
     const draft = modifierDrafts[item.id] ?? {};
@@ -325,9 +527,25 @@ function CustomerExperience() {
           modifiers,
           note,
           quantity: 1,
+          maxQuantity,
         },
       ];
     });
+  }
+
+  function updateCartLine(index: number, nextQuantity: number) {
+    setCart((current) =>
+      current.flatMap((line, lineIndex) => {
+        if (lineIndex !== index) return [line];
+        if (nextQuantity <= 0) return [];
+        return [
+          {
+            ...line,
+            quantity: Math.min(nextQuantity, line.maxQuantity),
+          },
+        ];
+      }),
+    );
   }
 
   const totalCents = cart.reduce(
@@ -375,7 +593,7 @@ function CustomerExperience() {
       await refreshOrders();
       setCart([]);
       setMenu(refreshed);
-      setNotice(`Order sent: ${response.orderId.slice(0, 8)}`);
+      setNotice(`${t.orderSent}: ${response.orderId.slice(0, 8)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -392,7 +610,7 @@ function CustomerExperience() {
         body: JSON.stringify({ qrToken, type }),
       });
       await refreshOrders();
-      setNotice("Request sent to FOH");
+      setNotice(t.requestSent);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -407,18 +625,31 @@ function CustomerExperience() {
         </section>
         <section className="card grid">
           <label className="field">
-            <span>Table token</span>
+            <span>{t.tableToken}</span>
             <input
               className="input"
               value={manualToken}
               onChange={(event) => setManualToken(event.target.value)}
             />
+            <span>{t.tableTokenHelp}</span>
+          </label>
+          <label className="field">
+            <span>{t.language}</span>
+            <select
+              className="select"
+              value={language}
+              onChange={(event) =>
+                handleLanguageChange(event.target.value as LanguageCode)
+              }
+            >
+              <option value="en">English</option>
+              <option value="fr-CA">Francais</option>
+              <option value="zh-CN">中文</option>
+            </select>
           </label>
           <button
             className="btn primary"
-            onClick={() =>
-              router.push(`/c?t=${encodeURIComponent(manualToken.trim())}`)
-            }
+            onClick={openManualMenu}
             disabled={!manualToken.trim()}
           >
             {t.openMenu}
@@ -433,14 +664,10 @@ function CustomerExperience() {
       <section className="page-header customer-header">
         <div>
           <span className="meta">
-            {menu ? `Table ${menu.table.number}` : "Dine-in"}
+            {menu ? `${t.tableStep} ${menu.table.number}` : t.dineIn}
           </span>
-          <h1>{menu?.store.name ?? "Customer menu"}</h1>
-          <p>
-            {menu
-              ? "Browse the menu first. Your table status is below the menu."
-              : "Loading menu..."}
-          </p>
+          <h1>{menu?.store.name ?? t.menu}</h1>
+          <p>{menu ? t.browsePrompt : t.loadingMenu}</p>
         </div>
         {orders ? (
           <div className="customer-total-pill">
@@ -456,6 +683,50 @@ function CustomerExperience() {
         ) : null}
       </section>
 
+      <section className="customer-step-strip" aria-label={t.orderingSteps}>
+        <a className="customer-step active" href="#menu">
+          <span>{t.tableStep}</span>
+          <strong>
+            {menu ? `${t.tableStep} ${menu.table.number}` : t.dineIn}
+          </strong>
+          <small>{t.tableReady}</small>
+        </a>
+        <a className="customer-step active" href="#menu">
+          <span>{t.menuStep}</span>
+          <strong>
+            {countLabel(
+              totalMenuItemCount,
+              t.itemSingular,
+              t.itemPlural,
+              language,
+            )}
+          </strong>
+          <small>{t.categoryTabs}</small>
+        </a>
+        <a
+          className={`customer-step ${totalQuantity > 0 ? "active" : ""}`}
+          href="#cart"
+        >
+          <span>{t.cartStep}</span>
+          <strong>
+            {countLabel(totalQuantity, t.itemSingular, t.itemPlural, language)}
+          </strong>
+          <small>{t.cartTitle}</small>
+        </a>
+        <a
+          className={`customer-step ${
+            activeOrderCount > 0 || pendingRequestCount > 0 ? "active" : ""
+          }`}
+          href="#status"
+        >
+          <span>{t.statusStep}</span>
+          <strong>
+            {activeOrderCount} / {pendingRequestCount}
+          </strong>
+          <small>{t.statusSummary}</small>
+        </a>
+      </section>
+
       <section className="card grid customer-controls">
         <label className="field customer-search">
           <span>{t.search}</span>
@@ -463,7 +734,7 @@ function CustomerExperience() {
             className="input"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Noodles, dumplings, tea"
+            placeholder={t.searchPlaceholder}
           />
         </label>
         <label className="field customer-language">
@@ -472,7 +743,7 @@ function CustomerExperience() {
             className="select"
             value={language}
             onChange={(event) =>
-              setLanguage(event.target.value as LanguageCode)
+              handleLanguageChange(event.target.value as LanguageCode)
             }
           >
             <option value="en">English</option>
@@ -480,9 +751,13 @@ function CustomerExperience() {
             <option value="zh-CN">中文</option>
           </select>
         </label>
+        <div className="customer-service-copy">
+          <strong>{t.serviceRequests}</strong>
+          <span>{t.serviceHelp}</span>
+        </div>
         <div
           className="row customer-service-actions"
-          aria-label="Service requests"
+          aria-label={t.serviceRequests}
         >
           <button
             className="btn ghost"
@@ -504,21 +779,54 @@ function CustomerExperience() {
           </button>
         </div>
         {notice ? (
-          <div className="success card customer-message">{notice}</div>
+          <div className="success customer-message">{notice}</div>
         ) : null}
-        {error ? (
-          <div className="error card customer-message">{error}</div>
-        ) : null}
+        {error ? <div className="error customer-message">{error}</div> : null}
       </section>
 
+      {menu ? (
+        <nav className="category-tabs" aria-label={t.categoryTabs}>
+          <a href="#menu">
+            <span>{t.allCategories}</span>
+            <strong>
+              {query.trim()
+                ? `${visibleItemCount}/${totalMenuItemCount}`
+                : totalMenuItemCount}
+            </strong>
+          </a>
+          {menu.categories.map((category) => (
+            <a href={`#${sectionId(category.id)}`} key={category.id}>
+              <span>{category.name}</span>
+              <strong>{category.items.length}</strong>
+            </a>
+          ))}
+        </nav>
+      ) : null}
+
       <section className="grid customer-menu-grid" id="menu">
+        {menu && filteredCategories.length === 0 ? (
+          <div className="card empty-state">
+            <h2>{t.emptyMenuTitle}</h2>
+            <p>{t.emptyMenuBody}</p>
+            <button className="btn ghost" onClick={() => setQuery("")}>
+              {t.clearSearch}
+            </button>
+          </div>
+        ) : null}
         {filteredCategories.map((category) => (
-          <div className="card" key={category.id}>
+          <div className="card" id={sectionId(category.id)} key={category.id}>
             <div className="row between">
               <h2>
                 {t.menu} / {category.name}
               </h2>
-              <span className="meta">{category.items.length} items</span>
+              <span className="meta">
+                {countLabel(
+                  category.items.length,
+                  t.itemSingular,
+                  t.itemPlural,
+                  language,
+                )}
+              </span>
             </div>
             <div className="list">
               {category.items.map((item) => {
@@ -548,7 +856,11 @@ function CustomerExperience() {
                     key={item.id}
                   >
                     {item.imageUrl ? (
-                      <img className="menu-thumb" src={item.imageUrl} alt="" />
+                      <img
+                        className="menu-thumb"
+                        src={item.imageUrl}
+                        alt={displayName}
+                      />
                     ) : (
                       <div className="menu-thumb placeholder" />
                     )}
@@ -574,14 +886,19 @@ function CustomerExperience() {
                         >
                           {stockLabel(item, language)}
                         </span>
+                        {itemQuantityInCart > 0 ? (
+                          <span className="status ok">
+                            {itemQuantityInCart} {t.selectedInCart}
+                          </span>
+                        ) : null}
                         {item.spiceLevel > 0 ? (
                           <span className="status checkout">
-                            Spice {item.spiceLevel}/5
+                            {t.spice} {item.spiceLevel}/5
                           </span>
                         ) : null}
                         {item.allergens.length > 0 ? (
                           <span className="meta">
-                            Allergens: {item.allergens.join(", ")}
+                            {t.allergens}: {item.allergens.join(", ")}
                           </span>
                         ) : null}
                       </div>
@@ -630,7 +947,7 @@ function CustomerExperience() {
                                       }
                                     >
                                       {!group.required ? (
-                                        <option value="">None</option>
+                                        <option value="">{t.none}</option>
                                       ) : null}
                                       {group.options.map((option) => (
                                         <option
@@ -749,6 +1066,7 @@ function CustomerExperience() {
 
       {orders ? (
         <details
+          id="status"
           className="customer-status-panel"
           open={activeOrderCount > 0 || pendingRequestCount > 0}
         >
@@ -756,7 +1074,8 @@ function CustomerExperience() {
             <span>
               <strong>{t.viewStatus}</strong>
               <span className="meta">
-                {activeOrderCount} open / {pendingRequestCount} request
+                {activeOrderCount} {t.openStatus} / {pendingRequestCount}{" "}
+                {t.serviceRequests}
               </span>
             </span>
             <span className="status">
@@ -780,6 +1099,30 @@ function CustomerExperience() {
                   {t.refresh}
                 </button>
               </div>
+              <div className="row between">
+                <span className="meta">{t.subtotal}</span>
+                <span>
+                  {formatCents(
+                    orders.openTotals.subtotalCents,
+                    orders.store.currency,
+                    orders.store.locale,
+                  )}
+                </span>
+              </div>
+              {orders.openTotals.serviceChargeCents > 0 ? (
+                <div className="row between">
+                  <span className="meta">
+                    {orders.openTotals.serviceChargeLabel || t.serviceCharge}
+                  </span>
+                  <span>
+                    {formatCents(
+                      orders.openTotals.serviceChargeCents,
+                      orders.store.currency,
+                      orders.store.locale,
+                    )}
+                  </span>
+                </div>
+              ) : null}
               <div className="row between">
                 <span className="meta">{t.openTotal}</span>
                 <strong>
@@ -806,6 +1149,18 @@ function CustomerExperience() {
                   ))}
                 </div>
               ) : null}
+              {orders.openTotals.includedTaxCents > 0 ? (
+                <div className="row between">
+                  <span className="meta">{t.includedTax}</span>
+                  <span className="meta">
+                    {formatCents(
+                      orders.openTotals.includedTaxCents,
+                      orders.store.currency,
+                      orders.store.locale,
+                    )}
+                  </span>
+                </div>
+              ) : null}
             </article>
 
             <article className="card grid">
@@ -823,12 +1178,12 @@ function CustomerExperience() {
                             : ""
                       }`}
                     >
-                      {requestStatusLabel(request.status)}
+                      {requestStatusLabel(request.status, language)}
                     </span>
                   </div>
                 ))}
                 {orders.serviceRequests.length === 0 ? (
-                  <span className="meta">No service requests yet.</span>
+                  <span className="meta">{t.noServiceRequests}</span>
                 ) : null}
               </div>
             </article>
@@ -839,7 +1194,9 @@ function CustomerExperience() {
                 {orders.orders.map((order) => (
                   <div className="list-item order-card" key={order.id}>
                     <div className="row between">
-                      <strong>Order {order.id.slice(0, 8)}</strong>
+                      <strong>
+                        {t.orderLabel} {order.id.slice(0, 8)}
+                      </strong>
                       <span
                         className={`status ${
                           order.status === "SUBMITTED"
@@ -849,7 +1206,7 @@ function CustomerExperience() {
                               : "urgent"
                         }`}
                       >
-                        {orderStatusLabel(order.status)}
+                        {orderStatusLabel(order.status, language)}
                       </span>
                     </div>
                     <div className="list compact-list">
@@ -868,7 +1225,7 @@ function CustomerExperience() {
                                     : "urgent"
                               }`}
                             >
-                              {itemStatusLabel(item.status)}
+                              {itemStatusLabel(item.status, language)}
                             </span>
                           </div>
                           {item.modifiers.length > 0 ? (
@@ -883,7 +1240,7 @@ function CustomerExperience() {
                       ))}
                     </div>
                     <div className="row between">
-                      <span className="meta">Total</span>
+                      <span className="meta">{t.total}</span>
                       <strong>
                         {formatCents(
                           order.totals.totalCents,
@@ -895,7 +1252,7 @@ function CustomerExperience() {
                   </div>
                 ))}
                 {orders.orders.length === 0 ? (
-                  <span className="meta">No orders yet.</span>
+                  <span className="meta">{t.noOrders}</span>
                 ) : null}
               </div>
             </article>
@@ -904,18 +1261,26 @@ function CustomerExperience() {
       ) : null}
 
       {cart.length > 0 ? (
-        <div className="cart-bar">
+        <div className="cart-bar" id="cart">
           <div className="card grid">
             <div className="row between">
               <div>
-                <strong>{totalQuantity} items</strong>
+                <strong>{t.cartTitle}</strong>
                 <div className="meta">
+                  {countLabel(
+                    totalQuantity,
+                    t.itemSingular,
+                    t.itemPlural,
+                    language,
+                  )}{" "}
+                  /{" "}
                   {formatCents(
                     totalCents,
                     menu?.store.currency,
                     menu?.store.locale,
                   )}
                 </div>
+                <div className="meta">{t.cartHelp}</div>
               </div>
               <div className="row">
                 <button className="btn ghost" onClick={() => setCart([])}>
@@ -932,16 +1297,36 @@ function CustomerExperience() {
             </div>
             <div className="list compact-list">
               {cart.map((line, index) => (
-                <div
-                  className="row between"
-                  key={`${line.menuItemId}-${index}`}
-                >
-                  <span>
-                    {line.quantity}x {line.name}
-                    {line.modifiers.length > 0
-                      ? ` / ${line.modifiers.map(modifierName).join(" / ")}`
-                      : ""}
-                  </span>
+                <div className="cart-line" key={`${line.menuItemId}-${index}`}>
+                  <div>
+                    <strong>{line.name}</strong>
+                    <div className="meta">
+                      {line.modifiers.length > 0
+                        ? line.modifiers.map(modifierName).join(" / ")
+                        : t.none}
+                    </div>
+                    {line.note ? <div className="meta">{line.note}</div> : null}
+                  </div>
+                  <div className="quantity-stepper">
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      aria-label={`${t.decrease} ${line.name}`}
+                      onClick={() => updateCartLine(index, line.quantity - 1)}
+                    >
+                      -
+                    </button>
+                    <span>{line.quantity}</span>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      aria-label={`${t.increase} ${line.name}`}
+                      onClick={() => updateCartLine(index, line.quantity + 1)}
+                      disabled={line.quantity >= line.maxQuantity}
+                    >
+                      +
+                    </button>
+                  </div>
                   <strong>
                     {formatCents(
                       line.priceCents * line.quantity,
