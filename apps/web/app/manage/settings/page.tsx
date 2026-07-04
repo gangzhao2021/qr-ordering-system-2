@@ -30,7 +30,7 @@ type FormState = {
   taxNumber: string;
   taxMode: "SINGLE" | "CANADA" | "CHINA";
   priceIncludesTax: boolean;
-  taxRulesJson: string;
+  taxRules: TaxRuleDraft[];
   taxLabel: string;
   taxRatePercent: string;
   serviceChargeLabel: string;
@@ -41,12 +41,45 @@ type FormState = {
   receiptFooter: string;
 };
 
+type TaxRuleDraft = {
+  id: string;
+  label: string;
+  ratePercent: string;
+  appliesTo: string;
+  compoundOnPrevious: boolean;
+};
+
 function bpsToPercent(value: number) {
   return (value / 100).toFixed(2).replace(/\.?0+$/, "");
 }
 
 function percentToBps(value: string) {
   return Math.round(Number(value || "0") * 100);
+}
+
+function taxRuleDrafts(
+  rules: StoreSettings["taxRules"],
+  fallback: Pick<StoreSettings, "taxLabel" | "taxRateBps">,
+): TaxRuleDraft[] {
+  const source =
+    rules.length > 0
+      ? rules
+      : [
+          {
+            id: fallback.taxLabel.toLowerCase() || "tax",
+            label: fallback.taxLabel,
+            rateBps: fallback.taxRateBps,
+            appliesTo: "ALL",
+          },
+        ];
+
+  return source.map((rule) => ({
+    id: rule.id,
+    label: rule.label,
+    ratePercent: bpsToPercent(rule.rateBps),
+    appliesTo: rule.appliesTo,
+    compoundOnPrevious: Boolean(rule.compoundOnPrevious),
+  }));
 }
 
 function toForm(store: StoreSettings): FormState {
@@ -64,7 +97,7 @@ function toForm(store: StoreSettings): FormState {
     taxNumber: store.taxNumber ?? "",
     taxMode: store.taxMode,
     priceIncludesTax: store.priceIncludesTax,
-    taxRulesJson: JSON.stringify(store.taxRules, null, 2),
+    taxRules: taxRuleDrafts(store.taxRules, store),
     taxLabel: store.taxLabel,
     taxRatePercent: bpsToPercent(store.taxRateBps),
     serviceChargeLabel: store.serviceChargeLabel,
@@ -92,11 +125,15 @@ function preset(
       priceIncludesTax: true,
       taxLabel: "VAT",
       taxRatePercent: "6",
-      taxRulesJson: JSON.stringify(
-        [{ id: "vat", label: "VAT", rateBps: 600, appliesTo: "ALL" }],
-        null,
-        2,
-      ),
+      taxRules: [
+        {
+          id: "vat",
+          label: "VAT",
+          ratePercent: "6",
+          appliesTo: "ALL",
+          compoundOnPrevious: false,
+        },
+      ],
       enabledPaymentMethods: ["WECHAT_PAY", "ALIPAY", "UNIONPAY", "CASH"],
     };
   }
@@ -110,14 +147,22 @@ function preset(
       taxMode: "CANADA",
       taxLabel: "GST/PST",
       taxRatePercent: "12",
-      taxRulesJson: JSON.stringify(
-        [
-          { id: "gst", label: "GST", rateBps: 500, appliesTo: "ALL" },
-          { id: "pst", label: "PST", rateBps: 700, appliesTo: "ALL" },
-        ],
-        null,
-        2,
-      ),
+      taxRules: [
+        {
+          id: "gst",
+          label: "GST",
+          ratePercent: "5",
+          appliesTo: "ALL",
+          compoundOnPrevious: false,
+        },
+        {
+          id: "pst",
+          label: "PST",
+          ratePercent: "7",
+          appliesTo: "ALL",
+          compoundOnPrevious: false,
+        },
+      ],
       enabledPaymentMethods: ["CASH", "CARD", "INTERAC", "STRIPE", "OTHER"],
     };
   }
@@ -133,14 +178,22 @@ function preset(
       taxMode: "CANADA",
       taxLabel: "GST/QST",
       taxRatePercent: "14.975",
-      taxRulesJson: JSON.stringify(
-        [
-          { id: "gst", label: "GST", rateBps: 500, appliesTo: "ALL" },
-          { id: "qst", label: "QST", rateBps: 998, appliesTo: "ALL" },
-        ],
-        null,
-        2,
-      ),
+      taxRules: [
+        {
+          id: "gst",
+          label: "GST",
+          ratePercent: "5",
+          appliesTo: "ALL",
+          compoundOnPrevious: false,
+        },
+        {
+          id: "qst",
+          label: "QST",
+          ratePercent: "9.975",
+          appliesTo: "ALL",
+          compoundOnPrevious: false,
+        },
+      ],
       enabledPaymentMethods: ["CASH", "CARD", "INTERAC", "STRIPE", "OTHER"],
     };
   }
@@ -155,11 +208,15 @@ function preset(
     taxMode: "CANADA",
     taxLabel: "HST",
     taxRatePercent: "13",
-    taxRulesJson: JSON.stringify(
-      [{ id: "hst", label: "HST", rateBps: 1300, appliesTo: "ALL" }],
-      null,
-      2,
-    ),
+    taxRules: [
+      {
+        id: "hst",
+        label: "HST",
+        ratePercent: "13",
+        appliesTo: "ALL",
+        compoundOnPrevious: false,
+      },
+    ],
     enabledPaymentMethods: ["CASH", "CARD", "INTERAC", "STRIPE", "OTHER"],
   };
 }
@@ -186,13 +243,65 @@ export default function ManageSettingsPage() {
     setForm((current) => (current ? { ...current, [key]: value } : current));
   }
 
+  function updateTaxRule(index: number, patch: Partial<TaxRuleDraft>) {
+    setForm((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        taxRules: current.taxRules.map((rule, ruleIndex) =>
+          ruleIndex === index ? { ...rule, ...patch } : rule,
+        ),
+      };
+    });
+  }
+
+  function addTaxRule() {
+    setForm((current) => {
+      if (!current) return current;
+      const nextIndex = current.taxRules.length + 1;
+      return {
+        ...current,
+        taxRules: [
+          ...current.taxRules,
+          {
+            id: `tax-${nextIndex}`,
+            label: `Tax ${nextIndex}`,
+            ratePercent: "0",
+            appliesTo: "ALL",
+            compoundOnPrevious: false,
+          },
+        ],
+      };
+    });
+  }
+
+  function removeTaxRule(index: number) {
+    setForm((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        taxRules: current.taxRules.filter(
+          (_, ruleIndex) => ruleIndex !== index,
+        ),
+      };
+    });
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!form) return;
     setSaving(true);
     setMessage(null);
     try {
-      const taxRules = JSON.parse(form.taxRulesJson || "[]");
+      const taxRules = form.taxRules
+        .filter((rule) => rule.id.trim() && rule.label.trim())
+        .map((rule) => ({
+          id: rule.id.trim(),
+          label: rule.label.trim(),
+          rateBps: percentToBps(rule.ratePercent),
+          appliesTo: rule.appliesTo.trim() || "ALL",
+          ...(rule.compoundOnPrevious ? { compoundOnPrevious: true } : {}),
+        }));
       const payload = {
         name: form.name,
         market: form.market,
@@ -446,7 +555,7 @@ export default function ManageSettingsPage() {
                 />
               </label>
               <label className="field">
-                <span>Tax label</span>
+                <span>Fallback tax label</span>
                 <input
                   className="input"
                   value={form.taxLabel}
@@ -454,7 +563,7 @@ export default function ManageSettingsPage() {
                 />
               </label>
               <label className="field">
-                <span>Tax rate %</span>
+                <span>Fallback tax rate %</span>
                 <input
                   className="input"
                   inputMode="decimal"
@@ -487,14 +596,100 @@ export default function ManageSettingsPage() {
               </label>
             </section>
 
-            <label className="field">
-              <span>Tax rules JSON</span>
-              <textarea
-                className="input textarea mono"
-                value={form.taxRulesJson}
-                onChange={(event) => update("taxRulesJson", event.target.value)}
-              />
-            </label>
+            <section className="grid settings-tax-rules">
+              <div className="row between">
+                <div>
+                  <h2>Tax rules</h2>
+                  <p>
+                    Add one line for HST/VAT, or multiple lines for GST/PST/QST.
+                  </p>
+                </div>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={addTaxRule}
+                >
+                  Add tax line
+                </button>
+              </div>
+
+              <div className="settings-tax-grid">
+                {form.taxRules.map((rule, index) => (
+                  <div className="tax-rule-row" key={`${rule.id}-${index}`}>
+                    <label className="field">
+                      <span>Code</span>
+                      <input
+                        className="input"
+                        value={rule.id}
+                        onChange={(event) =>
+                          updateTaxRule(index, {
+                            id: event.target.value
+                              .trim()
+                              .toLowerCase()
+                              .replace(/\s+/g, "-"),
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Label</span>
+                      <input
+                        className="input"
+                        value={rule.label}
+                        onChange={(event) =>
+                          updateTaxRule(index, { label: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Rate %</span>
+                      <input
+                        className="input"
+                        inputMode="decimal"
+                        value={rule.ratePercent}
+                        onChange={(event) =>
+                          updateTaxRule(index, {
+                            ratePercent: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Applies to</span>
+                      <input
+                        className="input"
+                        value={rule.appliesTo}
+                        onChange={(event) =>
+                          updateTaxRule(index, {
+                            appliesTo: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="mini-check tax-compound-check">
+                      <input
+                        type="checkbox"
+                        checked={rule.compoundOnPrevious}
+                        onChange={(event) =>
+                          updateTaxRule(index, {
+                            compoundOnPrevious: event.target.checked,
+                          })
+                        }
+                      />
+                      <span>Compound</span>
+                    </label>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      onClick={() => removeTaxRule(index)}
+                      disabled={form.taxRules.length <= 1}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
 
             <section className="grid">
               <h2>Payment methods</h2>

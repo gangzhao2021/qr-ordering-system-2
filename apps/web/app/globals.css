@@ -563,6 +563,33 @@ textarea {
   width: 100%;
 }
 
+.settings-tax-rules {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.settings-tax-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.tax-rule-row {
+  display: grid;
+  grid-template-columns:
+    minmax(100px, 0.7fr) minmax(120px, 1fr) minmax(88px, 0.55fr)
+    minmax(120px, 0.8fr) minmax(104px, auto) auto;
+  gap: 10px;
+  align-items: end;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.tax-compound-check {
+  align-self: end;
+  min-height: 40px;
+}
+
 .kitchen-page {
   max-width: 1320px;
 }
@@ -1103,6 +1130,10 @@ textarea {
   .foh-action-buttons,
   .foh-action-buttons .btn {
     width: 100%;
+  }
+
+  .tax-rule-row {
+    grid-template-columns: 1fr;
   }
 
   .kitchen-header,
