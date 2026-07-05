@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { UserRole } from "@prisma/client";
 import type { AuthUser, StaffRole } from "@qr2/shared";
 import { cookieName, toStaffRole, verifySession } from "./auth.js";
+import { withStoreScope } from "./data.js";
 import { prisma } from "./db.js";
 import { HttpError } from "./http.js";
 
@@ -124,4 +125,13 @@ export function requireRoles(roles: readonly StaffRole[]) {
       next(error);
     }
   };
+}
+
+export function applyStoreScope(
+  req: AuthedRequest,
+  _res: Response,
+  next: NextFunction,
+) {
+  const requestedStoreId = req.header("x-store-id")?.trim() || null;
+  withStoreScope({ user: req.user ?? null, requestedStoreId }, () => next());
 }

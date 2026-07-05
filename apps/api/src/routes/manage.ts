@@ -23,13 +23,16 @@ import {
   deleteMenuCategory,
   deleteDiningTable,
   deleteMenuItem,
+  createPlatformStore,
   getManageAnalytics,
   getManageOperations,
   getManageMenu,
   getP0SmokeCockpit,
+  getP2SmokeCockpit,
   getFohPrintJobs,
   getManageStaff,
   getManageTables,
+  getPlatformOverview,
   getStoreSettings,
   reprintOrder,
   getP1SmokeCockpit,
@@ -49,6 +52,8 @@ import {
   updateSupplier,
   upsertRecipe,
 } from "../data.js";
+import { HttpError } from "../http.js";
+import type { AuthedRequest } from "../middleware.js";
 
 export const manageRouter = Router();
 
@@ -129,6 +134,16 @@ const staffBodySchema = z.object({
   password: z.string().min(6).max(200),
   name: z.string().trim().max(120).optional().nullable(),
   role: z.enum(STAFF_ROLES),
+});
+
+const platformStoreBodySchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  market: z.enum(STORE_MARKETS),
+  region: z.string().trim().max(80).optional().nullable(),
+  adminEmail: z.string().trim().email().max(200),
+  adminPassword: z.string().min(6).max(200),
+  adminName: z.string().trim().max(120).optional().nullable(),
+  tableCount: z.number().int().min(1).max(50).optional(),
 });
 
 const staffPatchSchema = staffBodySchema
@@ -333,6 +348,34 @@ manageRouter.get("/p0-smoke", async (_req, res, next) => {
 manageRouter.get("/p1-smoke", async (_req, res, next) => {
   try {
     res.json(await getP1SmokeCockpit());
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.get("/p2-smoke", async (_req, res, next) => {
+  try {
+    res.json(await getP2SmokeCockpit());
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.get("/platform", async (_req, res, next) => {
+  try {
+    res.json(await getPlatformOverview());
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.post("/platform/stores", async (req: AuthedRequest, res, next) => {
+  try {
+    if (req.user?.role !== "DEV") {
+      throw new HttpError(403, "FORBIDDEN", "Only DEV can create stores");
+    }
+    const body = platformStoreBodySchema.parse(req.body);
+    res.status(201).json(await createPlatformStore(body));
   } catch (error) {
     next(error);
   }

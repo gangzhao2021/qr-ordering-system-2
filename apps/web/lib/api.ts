@@ -8,6 +8,20 @@ type ApiErrorPayload = {
   };
 };
 
+function requestHeaders(headers?: HeadersInit) {
+  const result = new Headers(headers);
+  if (!result.has("content-type")) {
+    result.set("content-type", "application/json");
+  }
+  if (typeof window !== "undefined" && !result.has("x-store-id")) {
+    const storeId = window.localStorage
+      .getItem("qr2_selected_store_id")
+      ?.trim();
+    if (storeId) result.set("x-store-id", storeId);
+  }
+  return result;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -25,10 +39,7 @@ export async function apiFetch<T>(
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: "include",
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {}),
-    },
+    headers: requestHeaders(init?.headers),
   });
 
   if (!response.ok) {

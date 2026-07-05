@@ -51,6 +51,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Review customer feedback and mark feedback reviewed or resolved.
 - Review member order, payment, coupon, and feedback history.
 - Review P1 pilot readiness across purchasing, inventory, costing, customers, and feedback.
+- DEV creates stores, assigns first ADMIN, switches store context, and reviews P2 platform readiness.
 
 ### Printer Service
 
@@ -63,9 +64,10 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Marketing automation and richer customer segmentation.
 - Supplier invoice reconciliation and advanced recipe costing.
 - Deeper analytics and reporting.
-- DEV multi-store onboarding and fleet operations.
+- Fleet analytics and deeper multi-store operations.
 - KDS device heartbeat and category routing enforcement.
 
 ## Non-Negotiable Role Boundary
 
 Kitchen/KDS hardware is read-only. FOH is the only operator that changes live order state.
+ADMIN, FOH, KITCHEN, and PRINTER users are scoped to their assigned store. Only DEV can inspect another store context.

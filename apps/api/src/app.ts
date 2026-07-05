@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { HttpError } from "./http.js";
-import { requireRoles } from "./middleware.js";
+import { applyStoreScope, requireRoles } from "./middleware.js";
 import { authRouter } from "./routes/auth.js";
 import { fohRouter } from "./routes/foh.js";
 import { kitchenRouter } from "./routes/kitchen.js";
@@ -26,16 +26,28 @@ export function createApp() {
 
   app.use("/v1/auth", authRouter);
   app.use("/v1/public", publicRouter);
-  app.use("/v1/foh", requireRoles(["DEV", "ADMIN", "FOH"]), fohRouter);
+  app.use(
+    "/v1/foh",
+    requireRoles(["DEV", "ADMIN", "FOH"]),
+    applyStoreScope,
+    fohRouter,
+  );
   app.use(
     "/v1/kitchen",
     requireRoles(["DEV", "ADMIN", "KITCHEN"]),
+    applyStoreScope,
     kitchenRouter,
   );
-  app.use("/v1/manage", requireRoles(["DEV", "ADMIN"]), manageRouter);
+  app.use(
+    "/v1/manage",
+    requireRoles(["DEV", "ADMIN"]),
+    applyStoreScope,
+    manageRouter,
+  );
   app.use(
     "/v1/printer",
     requireRoles(["DEV", "ADMIN", "PRINTER"]),
+    applyStoreScope,
     printerRouter,
   );
 

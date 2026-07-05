@@ -19,6 +19,16 @@ const links = [
     body: "Pilot readiness for purchasing, inventory, costing, customers, and feedback.",
   },
   {
+    href: "/manage/p2-smoke",
+    title: "P2 smoke cockpit",
+    body: "Platform readiness for multi-store onboarding and tenant isolation.",
+  },
+  {
+    href: "/manage/platform",
+    title: "Platform",
+    body: "Create stores, switch DEV context, and review onboarding coverage.",
+  },
+  {
     href: "/manage/settings",
     title: "Store settings",
     body: "Currency, receipt identity, tax, and service charge.",

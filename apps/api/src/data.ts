@@ -1,12 +1,15 @@
 ﻿import { randomBytes } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Prisma } from "@prisma/client";
 import type {
   AuditLog,
+  AuthUser,
   CheckoutTableRequest,
   CheckoutTableResponse,
   Coupon,
   CreateFeedbackRequest,
   CreateCouponRequest,
+  CreatePlatformStoreRequest,
   CreateDiningTableRequest,
   CreateIngredientRequest,
   CreateInventoryAdjustmentRequest,
@@ -52,6 +55,8 @@ import type {
   P0SmokeCheck,
   P0SmokeStatus,
   P1SmokeCockpitResponse,
+  P2SmokeCockpitResponse,
+  PlatformOverviewResponse,
   PrintJob,
   PurchaseOrder,
   RefundPaymentRequest,
@@ -266,6 +271,17 @@ type PaymentRecord = {
   createdAt: Date;
   table?: { number: string } | null;
 };
+
+type StoreScope = {
+  user?: AuthUser | null;
+  requestedStoreId?: string | null;
+};
+
+const storeScopeStorage = new AsyncLocalStorage<StoreScope>();
+
+export function withStoreScope<T>(scope: StoreScope, callback: () => T): T {
+  return storeScopeStorage.run(scope, callback);
+}
 
 function toIso(date: Date) {
   return date.toISOString();
@@ -1140,6 +1156,23 @@ function resolveTableStatus(
 }
 
 async function getDefaultStore() {
+  const scope = storeScopeStorage.getStore();
+  const requestedStoreId = scope?.requestedStoreId?.trim();
+  const scopedStoreId =
+    scope?.user?.role === "DEV" && requestedStoreId
+      ? requestedStoreId
+      : scope?.user?.storeId;
+
+  if (scopedStoreId) {
+    const store = await prisma.store.findUnique({
+      where: { id: scopedStoreId },
+    });
+    if (!store) {
+      throw new HttpError(404, "STORE_NOT_FOUND", "Store not found");
+    }
+    return store;
+  }
+
   const store = await prisma.store.findFirst({ orderBy: { createdAt: "asc" } });
   if (!store) {
     throw new HttpError(
@@ -1149,6 +1182,77 @@ async function getDefaultStore() {
     );
   }
   return store;
+}
+
+function marketPreset(input: {
+  market: StoreMarket;
+  region?: string | null;
+  name: string;
+}): Prisma.StoreCreateInput {
+  const region =
+    input.region?.trim() || (input.market === "CHINA" ? "CN" : "ON");
+  if (input.market === "CHINA") {
+    return {
+      name: input.name,
+      market: "CHINA",
+      region,
+      currency: "CNY",
+      locale: "zh-CN",
+      timezone: "Asia/Shanghai",
+      defaultLanguage: "zh-CN",
+      supportedLanguages: ["zh-CN", "en"],
+      taxMode: "CHINA",
+      priceIncludesTax: true,
+      taxRules: [{ id: "vat", label: "VAT", rateBps: 600, appliesTo: "ALL" }],
+      taxLabel: "VAT",
+      taxRateBps: 600,
+      enabledPaymentMethods: ["WECHAT_PAY", "ALIPAY", "UNIONPAY", "CASH"],
+      invoiceInstructions:
+        "Capture fapiao details in the FOH note until invoice automation is configured.",
+      receiptFooter: "Thank you",
+    };
+  }
+
+  return {
+    name: input.name,
+    market: "CANADA",
+    region,
+    currency: "CAD",
+    locale: region === "QC" ? "fr-CA" : "en-CA",
+    timezone: region === "BC" ? "America/Vancouver" : "America/Toronto",
+    defaultLanguage: region === "QC" ? "fr-CA" : "en",
+    supportedLanguages:
+      region === "QC" ? ["fr-CA", "en", "zh-CN"] : ["en", "fr-CA", "zh-CN"],
+    taxMode: "CANADA",
+    priceIncludesTax: false,
+    taxRules:
+      region === "BC"
+        ? [
+            { id: "gst", label: "GST", rateBps: 500, appliesTo: "ALL" },
+            { id: "pst", label: "PST", rateBps: 700, appliesTo: "ALL" },
+          ]
+        : region === "QC"
+          ? [
+              { id: "gst", label: "GST", rateBps: 500, appliesTo: "ALL" },
+              { id: "qst", label: "QST", rateBps: 998, appliesTo: "ALL" },
+            ]
+          : [{ id: "hst", label: "HST", rateBps: 1300, appliesTo: "ALL" }],
+    taxLabel: region === "BC" ? "GST/PST" : region === "QC" ? "GST/QST" : "HST",
+    taxRateBps: region === "BC" ? 1200 : region === "QC" ? 1498 : 1300,
+    enabledPaymentMethods: ["CASH", "CARD", "INTERAC", "STRIPE", "OTHER"],
+    invoiceInstructions: "Ask FOH for a printed receipt.",
+    receiptFooter: "Thank you",
+  };
+}
+
+function platformCheck(
+  id: string,
+  label: string,
+  status: P0SmokeStatus,
+  detail: string,
+  href?: string,
+): P0SmokeCheck {
+  return { id, label, status, detail, ...(href ? { href } : {}) };
 }
 
 function normalizeEmail(email: string) {
@@ -2002,9 +2106,10 @@ export async function updateOrderItemStatus(
   itemId: string,
   status: OrderItemStatus,
 ) {
+  const store = await getDefaultStore();
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.orderItem.findUnique({
-      where: { id: itemId },
+    const existing = await tx.orderItem.findFirst({
+      where: { id: itemId, order: { storeId: store.id } },
       include: {
         menuItem: { select: { id: true, name: true, stockQuantity: true } },
       },
@@ -2054,8 +2159,9 @@ export async function updateServiceRequestStatus(
   requestId: string,
   status: ServiceRequestStatus,
 ) {
-  const existing = await prisma.serviceRequest.findUnique({
-    where: { id: requestId },
+  const store = await getDefaultStore();
+  const existing = await prisma.serviceRequest.findFirst({
+    where: { id: requestId, storeId: store.id },
   });
   if (!existing)
     throw new HttpError(
@@ -2078,15 +2184,16 @@ export async function checkoutTable(
   tableId: string,
   input: CheckoutTableRequest = {},
 ): Promise<CheckoutTableResponse> {
+  const store = await getDefaultStore();
   return prisma.$transaction(async (tx) => {
-    const table = await tx.diningTable.findUnique({
-      where: { id: tableId },
+    const table = await tx.diningTable.findFirst({
+      where: { id: tableId, storeId: store.id },
       include: { store: true },
     });
     if (!table) throw new HttpError(404, "TABLE_NOT_FOUND", "Table not found");
 
     const tableOrders = await tx.order.findMany({
-      where: { tableId, status: "SUBMITTED" },
+      where: { tableId, storeId: store.id, status: "SUBMITTED" },
       include: { items: true },
     });
     if (tableOrders.length === 0)
@@ -2304,9 +2411,10 @@ export async function refundPayment(
     );
   }
 
+  const store = await getDefaultStore();
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.payment.findUnique({
-      where: { id: paymentId },
+    const existing = await tx.payment.findFirst({
+      where: { id: paymentId, storeId: store.id },
       include: { table: { select: { number: true } } },
     });
     if (!existing) {
@@ -3460,6 +3568,312 @@ export async function getP1SmokeCockpit(): Promise<P1SmokeCockpitResponse> {
       { label: "Purchasing", href: "/manage/purchasing", role: "ADMIN" },
       { label: "Analytics", href: "/manage/analytics", role: "ADMIN" },
       { label: "P0 cockpit", href: "/manage/p0-smoke", role: "ADMIN" },
+    ],
+  };
+}
+
+async function getPlatformStores(currentStoreId: string, includeAll: boolean) {
+  const stores = await prisma.store.findMany({
+    where: includeAll ? undefined : { id: currentStoreId },
+    orderBy: [{ createdAt: "asc" }, { name: "asc" }],
+  });
+  const storeIds = stores.map((store) => store.id);
+  const [users, managers, tables, items] = await Promise.all([
+    prisma.user.groupBy({
+      by: ["storeId"],
+      where: { storeId: { in: storeIds } },
+      _count: { _all: true },
+    }),
+    prisma.user.groupBy({
+      by: ["storeId"],
+      where: {
+        storeId: { in: storeIds },
+        isActive: true,
+        role: { in: ["DEV", "ADMIN"] },
+      },
+      _count: { _all: true },
+    }),
+    prisma.diningTable.groupBy({
+      by: ["storeId"],
+      where: { storeId: { in: storeIds }, isActive: true },
+      _count: { _all: true },
+    }),
+    prisma.menuItem.groupBy({
+      by: ["storeId"],
+      where: { storeId: { in: storeIds }, isAvailable: true },
+      _count: { _all: true },
+    }),
+  ]);
+  const countMap = (
+    rows: Array<{ storeId: string; _count: { _all: number } }>,
+  ) => new Map(rows.map((row) => [row.storeId, row._count._all]));
+
+  const userCounts = countMap(users);
+  const managerCounts = countMap(managers);
+  const tableCounts = countMap(tables);
+  const itemCounts = countMap(items);
+
+  return stores.map((store) => ({
+    ...mapStoreSettings(store),
+    userCount: userCounts.get(store.id) ?? 0,
+    activeManagerCount: managerCounts.get(store.id) ?? 0,
+    activeTableCount: tableCounts.get(store.id) ?? 0,
+    menuItemCount: itemCounts.get(store.id) ?? 0,
+    isCurrent: store.id === currentStoreId,
+  }));
+}
+
+export async function getPlatformOverview(): Promise<PlatformOverviewResponse> {
+  const currentStore = await getDefaultStore();
+  const scope = storeScopeStorage.getStore();
+  const canCreateStores = scope?.user?.role === "DEV";
+  const stores = await getPlatformStores(currentStore.id, canCreateStores);
+  const storesWithManagers = stores.filter(
+    (store) => store.activeManagerCount > 0,
+  ).length;
+
+  return {
+    currentStore: mapStore(currentStore),
+    canCreateStores,
+    stores,
+    onboarding: [
+      platformCheck(
+        "platform-stores",
+        "Store catalog",
+        stores.length > 1 ? "READY" : "WATCH",
+        canCreateStores
+          ? `${stores.length} stores visible to DEV`
+          : "This account is scoped to one store",
+        "/manage/platform",
+      ),
+      platformCheck(
+        "platform-managers",
+        "Manager coverage",
+        storesWithManagers === stores.length ? "READY" : "NEEDS_SETUP",
+        `${storesWithManagers}/${stores.length} stores have an active DEV or ADMIN`,
+        "/manage/platform",
+      ),
+      platformCheck(
+        "platform-tables",
+        "Table setup",
+        stores.every((store) => store.activeTableCount > 0) ? "READY" : "WATCH",
+        `${stores.filter((store) => store.activeTableCount > 0).length}/${stores.length} stores have active tables`,
+        "/manage/tables",
+      ),
+      platformCheck(
+        "platform-switching",
+        "DEV store switcher",
+        canCreateStores ? "READY" : "WATCH",
+        canCreateStores
+          ? "DEV can select a store with the x-store-id scoped API header"
+          : "Non-DEV staff ignore cross-store selection headers",
+        "/manage/platform",
+      ),
+    ],
+  };
+}
+
+export async function createPlatformStore(
+  input: CreatePlatformStoreRequest,
+): Promise<PlatformOverviewResponse> {
+  const scope = storeScopeStorage.getStore();
+  const actor = scope?.user;
+  if (actor?.role !== "DEV") {
+    throw new HttpError(403, "FORBIDDEN", "Only DEV can create stores");
+  }
+
+  const name = input.name.trim();
+  const adminEmail = normalizeEmail(input.adminEmail);
+  const tableCount = Math.max(1, Math.min(input.tableCount ?? 4, 50));
+  const adminName = input.adminName?.trim() || "Store Admin";
+
+  const [existingStore, existingUser] = await Promise.all([
+    prisma.store.findUnique({ where: { name } }),
+    prisma.user.findUnique({ where: { email: adminEmail } }),
+  ]);
+  if (existingStore) {
+    throw new HttpError(409, "STORE_NAME_EXISTS", "Store name already exists");
+  }
+  if (existingUser) {
+    throw new HttpError(409, "USER_EMAIL_EXISTS", "Admin email already exists");
+  }
+
+  const passwordHash = await hashPassword(input.adminPassword);
+
+  await prisma.$transaction(async (tx) => {
+    const store = await tx.store.create({
+      data: marketPreset({
+        name,
+        market: input.market,
+        region: input.region,
+      }),
+    });
+
+    for (let index = 1; index <= tableCount; index += 1) {
+      await tx.diningTable.create({
+        data: {
+          storeId: store.id,
+          number: String(index),
+          qrToken: await generateUniqueQrToken(`${store.id}-${index}`),
+          isActive: true,
+        },
+      });
+    }
+
+    await tx.user.create({
+      data: {
+        storeId: store.id,
+        email: adminEmail,
+        name: adminName,
+        role: "ADMIN",
+        passwordHash,
+        isActive: true,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId: store.id,
+        actorId: actor.id,
+        actorEmail: actor.email,
+        action: "PLATFORM_STORE_CREATED",
+        entityType: "Store",
+        entityId: store.id,
+        metadata: {
+          market: input.market,
+          region: input.region ?? null,
+          tableCount,
+          adminEmail,
+        },
+      },
+    });
+  });
+
+  return getPlatformOverview();
+}
+
+export async function getP2SmokeCockpit(): Promise<P2SmokeCockpitResponse> {
+  const overview = await getPlatformOverview();
+  const stores = overview.stores;
+  const activeManagers = stores.reduce(
+    (sum, store) => sum + store.activeManagerCount,
+    0,
+  );
+  const storesWithManagers = stores.filter(
+    (store) => store.activeManagerCount > 0,
+  ).length;
+  const storesWithTables = stores.filter(
+    (store) => store.activeTableCount > 0,
+  ).length;
+  const storesWithMenuItems = stores.filter(
+    (store) => store.menuItemCount > 0,
+  ).length;
+  const checks = {
+    platform: [
+      platformCheck(
+        "p2-store-catalog",
+        "Multi-store catalog",
+        stores.length > 1 ? "READY" : "WATCH",
+        `${stores.length} stores visible in this platform context`,
+        "/manage/platform",
+      ),
+      platformCheck(
+        "p2-manager-coverage",
+        "Manager coverage",
+        storesWithManagers === stores.length ? "READY" : "NEEDS_SETUP",
+        `${storesWithManagers}/${stores.length} stores have an active manager`,
+        "/manage/platform",
+      ),
+      platformCheck(
+        "p2-table-bootstrap",
+        "Onboarding tables",
+        storesWithTables === stores.length ? "READY" : "WATCH",
+        `${storesWithTables}/${stores.length} stores have active QR tables`,
+        "/manage/tables",
+      ),
+    ],
+    isolation: [
+      platformCheck(
+        "p2-session-scope",
+        "Session store scope",
+        "READY",
+        "Staff routes resolve the current store from the authenticated session",
+        "/manage/platform",
+      ),
+      platformCheck(
+        "p2-dev-switcher",
+        "DEV store switcher",
+        overview.canCreateStores ? "READY" : "WATCH",
+        overview.canCreateStores
+          ? "DEV can send x-store-id to inspect another store"
+          : "Non-DEV staff stay locked to their assigned store",
+        "/manage/platform",
+      ),
+      platformCheck(
+        "p2-menu-boundary",
+        "Store content boundary",
+        storesWithMenuItems > 0 ? "READY" : "WATCH",
+        `${storesWithMenuItems}/${stores.length} stores have menu items; empty stores remain isolated setup shells`,
+        "/manage/menu",
+      ),
+    ],
+    regression: [
+      platformCheck(
+        "p2-p1-regression",
+        "P1 regression",
+        "READY",
+        "Keep P1 smoke in the release gate while platform scope expands",
+        "/manage/p1-smoke",
+      ),
+      platformCheck(
+        "p2-p0-regression",
+        "P0 regression",
+        "READY",
+        "Customer, FOH, kitchen, printer, and checkout smoke remains required",
+        "/manage/p0-smoke",
+      ),
+    ],
+  };
+  const allChecks = Object.values(checks).flat();
+
+  return {
+    store: overview.currentStore,
+    generatedAt: new Date().toISOString(),
+    overallStatus: smokeOverall(allChecks),
+    summary: {
+      stores: stores.length,
+      activeManagers,
+      storesWithManagers,
+      storesWithTables,
+      storesWithMenuItems,
+    },
+    modules: [
+      { id: "platform", title: "Platform onboarding", checks: checks.platform },
+      { id: "isolation", title: "Store isolation", checks: checks.isolation },
+      { id: "regression", title: "Regression gate", checks: checks.regression },
+    ],
+    commands: [
+      {
+        label: "Multi-store isolation",
+        command: "pnpm smoke:p2-multistore",
+        coverage: "DEV store creation, store switching, and admin isolation",
+      },
+      {
+        label: "P1 regression",
+        command: "pnpm smoke:p1",
+        coverage: "purchasing, stock movement, and operations data",
+      },
+      {
+        label: "P0 regression",
+        command: "pnpm smoke:p0",
+        coverage: "customer QR ordering, FOH, kitchen, printer, checkout",
+      },
+    ],
+    routes: [
+      { label: "Platform", href: "/manage/platform", role: "DEV" },
+      { label: "Store settings", href: "/manage/settings", role: "ADMIN" },
+      { label: "Staff", href: "/manage/staff", role: "ADMIN" },
+      { label: "P1 cockpit", href: "/manage/p1-smoke", role: "ADMIN" },
     ],
   };
 }
@@ -4725,8 +5139,9 @@ export async function getFohPayments(): Promise<PaymentsResponse> {
 }
 
 export async function reprintOrder(orderId: string) {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
+  const store = await getDefaultStore();
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, storeId: store.id },
     include: {
       store: true,
       table: true,
@@ -4783,7 +5198,10 @@ export async function claimPrinterJobs(limit = 5) {
 }
 
 export async function markPrintJobPrinted(jobId: string) {
-  const existing = await prisma.printJob.findUnique({ where: { id: jobId } });
+  const store = await getDefaultStore();
+  const existing = await prisma.printJob.findFirst({
+    where: { id: jobId, storeId: store.id },
+  });
   if (!existing)
     throw new HttpError(404, "PRINT_JOB_NOT_FOUND", "Print job not found");
 
@@ -4796,7 +5214,10 @@ export async function markPrintJobPrinted(jobId: string) {
 }
 
 export async function markPrintJobFailed(jobId: string) {
-  const existing = await prisma.printJob.findUnique({ where: { id: jobId } });
+  const store = await getDefaultStore();
+  const existing = await prisma.printJob.findFirst({
+    where: { id: jobId, storeId: store.id },
+  });
   if (!existing)
     throw new HttpError(404, "PRINT_JOB_NOT_FOUND", "Print job not found");
 

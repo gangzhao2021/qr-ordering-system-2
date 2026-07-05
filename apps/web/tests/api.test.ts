@@ -27,15 +27,18 @@ describe("apiFetch", () => {
     });
 
     expect(result).toEqual({ ok: true });
-    expect(fetchMock).toHaveBeenCalledWith("http://api.test/v1/auth/me", {
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = call;
+    expect(url).toBe("http://api.test/v1/auth/me");
+    expect(init).toMatchObject({
       method: "POST",
       credentials: "include",
-      headers: {
-        "content-type": "application/json",
-        "x-request-id": "test-request",
-      },
       body: JSON.stringify({ hello: "world" }),
     });
+    const headers = init?.headers as Headers;
+    expect(headers.get("content-type")).toBe("application/json");
+    expect(headers.get("x-request-id")).toBe("test-request");
   });
 
   it("throws an ApiError with the API error payload", async () => {

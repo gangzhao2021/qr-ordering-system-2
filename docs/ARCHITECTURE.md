@@ -19,6 +19,14 @@ P0 uses Prisma + PostgreSQL for durable store, table, menu, order, order item, a
 
 Staff workspaces use a signed HTTP-only session cookie. FOH routes allow `FOH`, `ADMIN`, and `DEV`; kitchen routes allow `KITCHEN`, `ADMIN`, and `DEV`; management routes allow `ADMIN` and `DEV`. Printer-service routes allow `PRINTER`, `ADMIN`, and `DEV`.
 
+Staff API routes resolve the active store from the authenticated session. The optional `x-store-id` request header is honored only for `DEV`, which allows platform inspection and store switching without giving ADMIN, FOH, KITCHEN, or PRINTER users cross-store access.
+
+## Platform Store Scope
+
+P2-A adds a small platform layer on top of the existing `Store` model. DEV can create stores through `/v1/manage/platform/stores`; the API applies a Canada/China market preset, creates opening QR tables, creates the first ADMIN account, and records an audit entry. New stores intentionally start without copied demo menu, order, inventory, member, coupon, or feedback data.
+
+The management platform page stores the selected DEV store in local browser storage and sends it as `x-store-id` on API calls. Non-DEV users ignore that header and continue to use `User.storeId` from the session. `/manage/p2-smoke` and `pnpm smoke:p2-multistore` prove this boundary before later payment, KDS authorization, or marketing work.
+
 ## Staff Management
 
 Management can create staff users, edit staff profile fields, assign staff roles, deactivate access, and reset passwords. Role, active-state, and password changes increment `User.sessionVersion`, which invalidates existing sessions for that account. The API prevents deactivating or downgrading the final active `DEV`/`ADMIN` manager in the store.
@@ -70,6 +78,8 @@ P1 stocktake adds applied stock counts for tracked menu items. Management can su
 P1 recipe costing adds `Ingredient`, `Recipe`, and `RecipeLine` records. Management can maintain ingredient stock quantity, unit, unit cost, low-stock threshold, and active state, then assign one recipe to a menu item. Recipe cost is computed from line quantity times current ingredient unit cost, divided by yield quantity, and the API reports cost, margin cents, and margin basis points for operations review. This foundation does not attempt complex unit conversion, supplier invoice averaging, or automatic ingredient-level stock consumption yet.
 
 The P1 smoke cockpit aggregates store-operations readiness from existing transactional tables rather than storing separate state. It reports supplier, purchase order, stocktake, ingredient, recipe, member, coupon, and feedback coverage, and links managers to the same operational surfaces used during smoke verification.
+
+The P2 smoke cockpit aggregates platform readiness from existing store, user, table, and menu rows. It reports store count, active manager coverage, table bootstrap coverage, menu setup coverage, and regression commands.
 
 KDS device records provide token and station inventory for device setup. The current kitchen page is still staff-session based and read-only; device-token heartbeat and station authorization are later-phase hardening.
 

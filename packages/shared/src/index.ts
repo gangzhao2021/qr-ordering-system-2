@@ -195,6 +195,31 @@ export type UpdateStoreSettingsRequest = Partial<
   >
 >;
 
+export type PlatformStoreSummary = StoreSettings & {
+  userCount: number;
+  activeManagerCount: number;
+  activeTableCount: number;
+  menuItemCount: number;
+  isCurrent: boolean;
+};
+
+export type PlatformOverviewResponse = {
+  currentStore: StoreSummary;
+  canCreateStores: boolean;
+  stores: PlatformStoreSummary[];
+  onboarding: P0SmokeCheck[];
+};
+
+export type CreatePlatformStoreRequest = {
+  name: string;
+  market: StoreMarket;
+  region?: string | null;
+  adminEmail: string;
+  adminPassword: string;
+  adminName?: string | null;
+  tableCount?: number;
+};
+
 export type OrderTotals = {
   subtotalCents: number;
   serviceChargeCents: number;
@@ -864,6 +889,30 @@ export type P1SmokeCockpitResponse = {
     coupons: number;
     feedback: number;
     unresolvedFeedback: number;
+  };
+  modules: P0SmokeStage[];
+  commands: Array<{
+    label: string;
+    command: string;
+    coverage: string;
+  }>;
+  routes: Array<{
+    label: string;
+    href: string;
+    role: StaffRole;
+  }>;
+};
+
+export type P2SmokeCockpitResponse = {
+  store: StoreSummary;
+  generatedAt: string;
+  overallStatus: P0SmokeStatus;
+  summary: {
+    stores: number;
+    activeManagers: number;
+    storesWithManagers: number;
+    storesWithTables: number;
+    storesWithMenuItems: number;
   };
   modules: P0SmokeStage[];
   commands: Array<{

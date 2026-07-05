@@ -27,8 +27,10 @@ pnpm dev
 - P1 inventory smoke against a running API: `pnpm smoke:p1-inventory`
 - P1 recipe costing smoke against a running API: `pnpm smoke:p1-recipes`
 - P1 feedback/profile smoke against a running API: `pnpm smoke:p1-feedback`
+- P2 multi-store smoke against a running API: `pnpm smoke:p2-multistore`
 - P0 closeout checklist: `docs/P0_EXIT_CRITERIA.md`
 - P1 closeout checklist: `docs/P1_EXIT_CRITERIA.md`
+- P2 closeout checklist: `docs/P2_EXIT_CRITERIA.md`
 
 This repo includes `.npmrc` settings that use a hoisted/copy install strategy. That is slower than
 pnpm's default linker, but it avoids Windows link stalls observed during the initial setup.
@@ -68,6 +70,13 @@ history includes the order, payment, and feedback.
 The management P1 smoke cockpit at `/manage/p1-smoke` summarizes the same P1 readiness areas and
 lists the required smoke commands before a small-restaurant pilot.
 
+`pnpm smoke:p2-multistore` expects a running API. It creates a real local store with a market
+preset, first ADMIN, and opening tables, verifies DEV can switch store context, and confirms
+non-DEV managers cannot cross stores by sending a different store header.
+
+The management P2 smoke cockpit at `/manage/p2-smoke` summarizes platform readiness for
+multi-store onboarding and tenant isolation.
+
 `pnpm test` runs package unit tests for shared contracts, API auth/session helpers, and web
 request/component behavior. It does not start the database or browser.
 
@@ -95,7 +104,10 @@ docs          rewrite plan and architecture notes
 - `/foh` - live FOH workspace
 - `/kitchen` - read-only kitchen display
 - `/manage` - management hub
+- `/manage/p0-smoke` - P0 operating-loop readiness cockpit
 - `/manage/p1-smoke` - P1 pilot readiness cockpit for store operations
+- `/manage/p2-smoke` - P2 platform readiness cockpit for multi-store isolation
+- `/manage/platform` - DEV store onboarding, store switching, and platform checks
 - `/manage/settings` - store identity, market presets, languages, tax, payment methods, and service charge settings
 - `/manage/menu` - menu category, localized item, modifier, price, availability, and stock management
 - `/manage/tables` - table CRUD, QR token rotation, and printable table cards
@@ -155,6 +167,10 @@ history should be deactivated; hard delete is limited to unused tables.
 
 Store settings include Canada and China presets, supported languages, invoice instructions,
 tax-rule JSON, price-includes-tax behavior, enabled payment methods, and tip settings.
+
+Platform management lets DEV create additional stores with Canada/China presets, a first ADMIN,
+opening QR tables, and an audit entry. Staff APIs resolve the active store from the authenticated
+session; only DEV can switch the current API store context with the management store selector.
 
 Operations management covers supplier contacts, stock adjustment history, applied stocktakes,
 ingredient stock/cost records, recipe cost and margin rollups, member records with payment/spend

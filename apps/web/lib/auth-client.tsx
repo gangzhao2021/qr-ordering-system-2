@@ -115,6 +115,7 @@ export function StaffSessionBar({ user }: { user: AuthUser | null }) {
       <span>
         {user.email} · {user.role}
       </span>
+      <span className="meta">Store {user.storeId}</span>
       <button className="btn ghost" onClick={() => void logout()}>
         Log out
       </button>
