@@ -42,3 +42,4 @@
 
 Do not widen scope until the previous phase has a complete manual smoke path.
 Use `docs/P0_EXIT_CRITERIA.md` as the P0 completion gate before starting P1 work.
+Use `docs/P1_EXIT_CRITERIA.md` as the P1 completion gate before starting P2 work.

@@ -96,6 +96,30 @@ type KdsForm = {
   isActive: boolean;
 };
 
+type OperationsSection = "inventory" | "customers" | "controls";
+
+const operationsSections: Array<{
+  id: OperationsSection;
+  title: string;
+  body: string;
+}> = [
+  {
+    id: "inventory",
+    title: "Inventory & Costing",
+    body: "Suppliers, stock movement, stocktakes, ingredients, and recipes.",
+  },
+  {
+    id: "customers",
+    title: "Customers",
+    body: "Members, coupons, feedback, and customer history.",
+  },
+  {
+    id: "controls",
+    title: "Devices & Audit",
+    body: "KDS device setup and audit review.",
+  },
+];
+
 const initialSupplier: SupplierForm = {
   name: "",
   contactName: "",
@@ -286,6 +310,8 @@ export default function ManageOperationsPage() {
   const [member, setMember] = useState<MemberForm>(initialMember);
   const [coupon, setCoupon] = useState<CouponForm>(initialCoupon);
   const [kds, setKds] = useState<KdsForm>(initialKds);
+  const [activeSection, setActiveSection] =
+    useState<OperationsSection>("inventory");
   const [supplierDrafts, setSupplierDrafts] = useState<
     Record<string, SupplierForm>
   >({});
@@ -321,6 +347,24 @@ export default function ManageOperationsPage() {
   const ingredients = useMemo(
     () => operations?.ingredients ?? [],
     [operations?.ingredients],
+  );
+  const sectionCounts = useMemo(
+    () => ({
+      inventory:
+        (operations?.suppliers.length ?? 0) +
+        (operations?.inventoryAdjustments.length ?? 0) +
+        (operations?.stocktakes.length ?? 0) +
+        (operations?.ingredients.length ?? 0) +
+        (operations?.recipes.length ?? 0),
+      customers:
+        (operations?.members.length ?? 0) +
+        (operations?.coupons.length ?? 0) +
+        (operations?.feedback.length ?? 0),
+      controls:
+        (operations?.kdsDevices.length ?? 0) +
+        (operations?.auditLogs.length ?? 0),
+    }),
+    [operations],
   );
 
   async function refresh() {
@@ -914,1716 +958,1786 @@ export default function ManageOperationsPage() {
         {error ? <div className="error card">{error}</div> : null}
         {notice ? <div className="success card">{notice}</div> : null}
 
-        <section className="grid two">
-          <form
-            className="card grid"
-            onSubmit={(event) => void submitSupplier(event)}
-          >
-            <h2>Supplier</h2>
-            <label className="field">
-              <span>Name</span>
-              <input
-                className="input"
-                value={supplier.name}
-                onChange={(event) =>
-                  setSupplier((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <div className="grid two">
-              <label className="field">
-                <span>Contact</span>
-                <input
-                  className="input"
-                  value={supplier.contactName}
-                  onChange={(event) =>
-                    setSupplier((current) => ({
-                      ...current,
-                      contactName: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Phone</span>
-                <input
-                  className="input"
-                  value={supplier.phone}
-                  onChange={(event) =>
-                    setSupplier((current) => ({
-                      ...current,
-                      phone: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <label className="field">
-              <span>Email</span>
-              <input
-                className="input"
-                value={supplier.email}
-                onChange={(event) =>
-                  setSupplier((current) => ({
-                    ...current,
-                    email: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Notes</span>
-              <textarea
-                className="input textarea"
-                value={supplier.notes}
-                onChange={(event) =>
-                  setSupplier((current) => ({
-                    ...current,
-                    notes: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <button className="btn primary" disabled={!supplier.name.trim()}>
-              Save supplier
-            </button>
-          </form>
-
-          <form
-            className="card grid"
-            onSubmit={(event) => void submitAdjustment(event)}
-          >
-            <h2>Inventory adjustment</h2>
-            <label className="field">
-              <span>Menu item</span>
-              <select
-                className="select"
-                value={adjustment.menuItemId}
-                onChange={(event) =>
-                  setAdjustment((current) => ({
-                    ...current,
-                    menuItemId: event.target.value,
-                  }))
-                }
-              >
-                {menuItems.map((item) => (
-                  <option value={item.id} key={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="grid two">
-              <label className="field">
-                <span>Quantity delta</span>
-                <input
-                  className="input"
-                  value={adjustment.quantityDelta}
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    setAdjustment((current) => ({
-                      ...current,
-                      quantityDelta: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Reason</span>
-                <input
-                  className="input"
-                  value={adjustment.reason}
-                  onChange={(event) =>
-                    setAdjustment((current) => ({
-                      ...current,
-                      reason: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <label className="field">
-              <span>Note</span>
-              <textarea
-                className="input textarea"
-                value={adjustment.note}
-                onChange={(event) =>
-                  setAdjustment((current) => ({
-                    ...current,
-                    note: event.target.value,
-                  }))
-                }
-              />
-            </label>
+        <section className="operations-tabs" aria-label="Operations sections">
+          {operationsSections.map((section) => (
             <button
-              className="btn primary"
-              disabled={!adjustment.menuItemId || !adjustment.reason.trim()}
-            >
-              Save adjustment
-            </button>
-          </form>
-
-          <form
-            className="card grid"
-            onSubmit={(event) => void submitStocktake(event)}
-          >
-            <div className="row between">
-              <h2>Stocktake</h2>
-              <button
-                className="btn ghost"
-                type="button"
-                onClick={addStocktakeLine}
-              >
-                Add line
-              </button>
-            </div>
-            <div className="grid two">
-              <label className="field">
-                <span>Name</span>
-                <input
-                  className="input"
-                  value={stocktake.name}
-                  placeholder="Daily count"
-                  onChange={(event) =>
-                    setStocktake((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Counted at</span>
-                <input
-                  className="input"
-                  type="datetime-local"
-                  value={stocktake.countedAt}
-                  onChange={(event) =>
-                    setStocktake((current) => ({
-                      ...current,
-                      countedAt: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <div className="operations-edit-list">
-              {stocktake.lines.map((line, index) => {
-                const item = trackedMenuItems.find(
-                  (entry) => entry.id === line.menuItemId,
-                );
-                return (
-                  <div
-                    className="operations-record-card"
-                    key={`${line.menuItemId}-${index}`}
-                  >
-                    <div className="operations-record-grid">
-                      <label className="field">
-                        <span>Menu item</span>
-                        <select
-                          className="select"
-                          value={line.menuItemId}
-                          onChange={(event) => {
-                            const nextItem = trackedMenuItems.find(
-                              (entry) => entry.id === event.target.value,
-                            );
-                            updateStocktakeLine(index, {
-                              menuItemId: event.target.value,
-                              countedQuantity: String(
-                                nextItem?.stockQuantity ?? 0,
-                              ),
-                            });
-                          }}
-                        >
-                          {trackedMenuItems.map((entry) => (
-                            <option value={entry.id} key={entry.id}>
-                              {entry.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Expected</span>
-                        <input
-                          className="input"
-                          value={stockLabel(item?.stockQuantity)}
-                          disabled
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Counted</span>
-                        <input
-                          className="input"
-                          inputMode="numeric"
-                          value={line.countedQuantity}
-                          onChange={(event) =>
-                            updateStocktakeLine(index, {
-                              countedQuantity: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Line note</span>
-                        <input
-                          className="input"
-                          value={line.note}
-                          onChange={(event) =>
-                            updateStocktakeLine(index, {
-                              note: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                    <button
-                      className="btn ghost"
-                      type="button"
-                      disabled={stocktake.lines.length <= 1}
-                      onClick={() => removeStocktakeLine(index)}
-                    >
-                      Remove line
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-            <label className="field">
-              <span>Note</span>
-              <textarea
-                className="input textarea"
-                value={stocktake.note}
-                onChange={(event) =>
-                  setStocktake((current) => ({
-                    ...current,
-                    note: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <button
-              className="btn primary"
-              disabled={
-                !stocktake.name.trim() ||
-                trackedMenuItems.length === 0 ||
-                stocktake.lines.every((line) => !line.menuItemId)
+              className={
+                activeSection === section.id
+                  ? "operations-tab active"
+                  : "operations-tab"
               }
+              key={section.id}
+              type="button"
+              onClick={() => setActiveSection(section.id)}
             >
-              Apply stocktake
+              <span>{section.title}</span>
+              <strong>{sectionCounts[section.id]}</strong>
+              <small>{section.body}</small>
             </button>
-          </form>
-
-          <form
-            className="card grid"
-            onSubmit={(event) => void submitIngredient(event)}
-          >
-            <h2>Ingredient</h2>
-            <div className="grid two">
-              <label className="field">
-                <span>Name</span>
-                <input
-                  className="input"
-                  value={ingredient.name}
-                  onChange={(event) =>
-                    setIngredient((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Unit</span>
-                <input
-                  className="input"
-                  value={ingredient.unit}
-                  placeholder="g, ml, unit"
-                  onChange={(event) =>
-                    setIngredient((current) => ({
-                      ...current,
-                      unit: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <div className="grid two">
-              <label className="field">
-                <span>Stock quantity</span>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  value={ingredient.stockQuantity}
-                  onChange={(event) =>
-                    setIngredient((current) => ({
-                      ...current,
-                      stockQuantity: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Unit cost</span>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  value={ingredient.unitCostCents}
-                  onChange={(event) =>
-                    setIngredient((current) => ({
-                      ...current,
-                      unitCostCents: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Low stock threshold</span>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  value={ingredient.lowStockThreshold}
-                  onChange={(event) =>
-                    setIngredient((current) => ({
-                      ...current,
-                      lowStockThreshold: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field checkbox-field">
-                <span>Active</span>
-                <input
-                  type="checkbox"
-                  checked={ingredient.isActive}
-                  onChange={(event) =>
-                    setIngredient((current) => ({
-                      ...current,
-                      isActive: event.target.checked,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <button
-              className="btn primary"
-              disabled={!ingredient.name.trim() || !ingredient.unit.trim()}
-            >
-              Save ingredient
-            </button>
-          </form>
-
-          <form
-            className="card grid"
-            onSubmit={(event) => void submitRecipe(event)}
-          >
-            <div className="row between">
-              <h2>Recipe</h2>
-              <button
-                className="btn ghost"
-                type="button"
-                onClick={addRecipeLine}
-              >
-                Add line
-              </button>
-            </div>
-            <label className="field">
-              <span>Menu item</span>
-              <select
-                className="select"
-                value={recipe.menuItemId}
-                onChange={(event) => selectRecipeMenuItem(event.target.value)}
-              >
-                {recipeMenuItems.length === 0 ? (
-                  <option value="">No available menu items</option>
-                ) : null}
-                {recipeMenuItems.map((item) => (
-                  <option value={item.id} key={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="grid two">
-              <label className="field">
-                <span>Yield quantity</span>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  value={recipe.yieldQuantity}
-                  onChange={(event) =>
-                    setRecipe((current) => ({
-                      ...current,
-                      yieldQuantity: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Note</span>
-                <input
-                  className="input"
-                  value={recipe.note}
-                  onChange={(event) =>
-                    setRecipe((current) => ({
-                      ...current,
-                      note: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <div className="operations-edit-list">
-              {recipe.lines.map((line, index) => {
-                const selectedIngredient = ingredients.find(
-                  (entry) => entry.id === line.ingredientId,
-                );
-                const lineCostCents =
-                  (selectedIngredient?.unitCostCents ?? 0) *
-                  Number(line.quantity || 0);
-                return (
-                  <div
-                    className="operations-record-card"
-                    key={`${line.ingredientId}-${index}`}
-                  >
-                    <div className="operations-record-grid">
-                      <label className="field">
-                        <span>Ingredient</span>
-                        <select
-                          className="select"
-                          value={line.ingredientId}
-                          onChange={(event) =>
-                            updateRecipeLine(index, {
-                              ingredientId: event.target.value,
-                            })
-                          }
-                        >
-                          {ingredients.length === 0 ? (
-                            <option value="">No ingredients</option>
-                          ) : null}
-                          {ingredients.map((entry) => (
-                            <option value={entry.id} key={entry.id}>
-                              {entry.name}
-                              {entry.isActive ? "" : " (inactive)"}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Quantity</span>
-                        <input
-                          className="input"
-                          inputMode="numeric"
-                          value={line.quantity}
-                          onChange={(event) =>
-                            updateRecipeLine(index, {
-                              quantity: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Line note</span>
-                        <input
-                          className="input"
-                          value={line.note}
-                          onChange={(event) =>
-                            updateRecipeLine(index, {
-                              note: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Line cost</span>
-                        <input
-                          className="input"
-                          value={formatCents(
-                            lineCostCents,
-                            operations?.store.currency,
-                            operations?.store.locale,
-                          )}
-                          disabled
-                        />
-                      </label>
-                    </div>
-                    <button
-                      className="btn ghost"
-                      type="button"
-                      disabled={recipe.lines.length <= 1}
-                      onClick={() => removeRecipeLine(index)}
-                    >
-                      Remove line
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-            <button
-              className="btn primary"
-              disabled={
-                !recipe.menuItemId ||
-                ingredients.length === 0 ||
-                recipe.lines.every((line) => !line.ingredientId)
-              }
-            >
-              Save recipe
-            </button>
-          </form>
-
-          <form
-            className="card grid"
-            onSubmit={(event) => void submitMember(event)}
-          >
-            <h2>Member</h2>
-            <label className="field">
-              <span>Phone</span>
-              <input
-                className="input"
-                value={member.phone}
-                onChange={(event) =>
-                  setMember((current) => ({
-                    ...current,
-                    phone: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <div className="grid two">
-              <label className="field">
-                <span>Name</span>
-                <input
-                  className="input"
-                  value={member.name}
-                  onChange={(event) =>
-                    setMember((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Points</span>
-                <input
-                  className="input"
-                  value={member.points}
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    setMember((current) => ({
-                      ...current,
-                      points: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <label className="field">
-              <span>Email</span>
-              <input
-                className="input"
-                value={member.email}
-                onChange={(event) =>
-                  setMember((current) => ({
-                    ...current,
-                    email: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <button className="btn primary" disabled={!member.phone.trim()}>
-              Save member
-            </button>
-          </form>
-
-          <form
-            className="card grid"
-            onSubmit={(event) => void submitCoupon(event)}
-          >
-            <h2>Coupon</h2>
-            <div className="grid two">
-              <label className="field">
-                <span>Code</span>
-                <input
-                  className="input"
-                  value={coupon.code}
-                  onChange={(event) =>
-                    setCoupon((current) => ({
-                      ...current,
-                      code: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Type</span>
-                <select
-                  className="select"
-                  value={coupon.discountType}
-                  onChange={(event) =>
-                    setCoupon((current) => ({
-                      ...current,
-                      discountType: event.target
-                        .value as CouponForm["discountType"],
-                    }))
-                  }
-                >
-                  <option value="PERCENT">Percent</option>
-                  <option value="AMOUNT">Amount</option>
-                </select>
-              </label>
-            </div>
-            <div className="grid two">
-              <label className="field">
-                <span>Value</span>
-                <input
-                  className="input"
-                  value={coupon.discountValue}
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    setCoupon((current) => ({
-                      ...current,
-                      discountValue: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Minimum subtotal</span>
-                <input
-                  className="input"
-                  value={coupon.minimumSubtotalCents}
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    setCoupon((current) => ({
-                      ...current,
-                      minimumSubtotalCents: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field checkbox-field">
-                <span>Active</span>
-                <input
-                  type="checkbox"
-                  checked={coupon.isActive}
-                  onChange={(event) =>
-                    setCoupon((current) => ({
-                      ...current,
-                      isActive: event.target.checked,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <div className="grid two">
-              <label className="field">
-                <span>Starts</span>
-                <input
-                  className="input"
-                  type="datetime-local"
-                  value={coupon.startsAt}
-                  onChange={(event) =>
-                    setCoupon((current) => ({
-                      ...current,
-                      startsAt: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Ends</span>
-                <input
-                  className="input"
-                  type="datetime-local"
-                  value={coupon.endsAt}
-                  onChange={(event) =>
-                    setCoupon((current) => ({
-                      ...current,
-                      endsAt: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <button className="btn primary" disabled={!coupon.code.trim()}>
-              Save coupon
-            </button>
-          </form>
-
-          <form
-            className="card grid"
-            onSubmit={(event) => void submitKds(event)}
-          >
-            <h2>KDS device</h2>
-            <div className="grid two">
-              <label className="field">
-                <span>Name</span>
-                <input
-                  className="input"
-                  value={kds.name}
-                  onChange={(event) =>
-                    setKds((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Station</span>
-                <input
-                  className="input"
-                  value={kds.station}
-                  onChange={(event) =>
-                    setKds((current) => ({
-                      ...current,
-                      station: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <label className="field">
-              <span>Token</span>
-              <input
-                className="input"
-                value={kds.token}
-                placeholder="Auto-generated"
-                onChange={(event) =>
-                  setKds((current) => ({
-                    ...current,
-                    token: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label className="field checkbox-field">
-              <span>Active</span>
-              <input
-                type="checkbox"
-                checked={kds.isActive}
-                onChange={(event) =>
-                  setKds((current) => ({
-                    ...current,
-                    isActive: event.target.checked,
-                  }))
-                }
-              />
-            </label>
-            <button className="btn primary" disabled={!kds.name.trim()}>
-              Save KDS device
-            </button>
-          </form>
+          ))}
         </section>
 
-        <section className="grid two operations-section">
-          <article className="card grid">
-            <h2>Suppliers</h2>
-            <div className="operations-edit-list">
-              {(operations?.suppliers ?? []).map((entry) => {
-                const draft = supplierDrafts[entry.id] ?? supplierForm(entry);
-                return (
-                  <div className="operations-record-card" key={entry.id}>
-                    <div className="row between">
-                      <strong>{entry.name}</strong>
-                      <span className={draft.isActive ? "status ok" : "status"}>
-                        {draft.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </div>
-                    <div className="operations-record-grid">
-                      <label className="field">
-                        <span>Name</span>
-                        <input
-                          className="input"
-                          value={draft.name}
-                          onChange={(event) =>
-                            updateSupplierDraft(entry.id, {
-                              name: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Contact</span>
-                        <input
-                          className="input"
-                          value={draft.contactName}
-                          onChange={(event) =>
-                            updateSupplierDraft(entry.id, {
-                              contactName: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Phone</span>
-                        <input
-                          className="input"
-                          value={draft.phone}
-                          onChange={(event) =>
-                            updateSupplierDraft(entry.id, {
-                              phone: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Email</span>
-                        <input
-                          className="input"
-                          value={draft.email}
-                          onChange={(event) =>
-                            updateSupplierDraft(entry.id, {
-                              email: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="mini-check operations-active-check">
-                        <input
-                          type="checkbox"
-                          checked={draft.isActive}
-                          onChange={(event) =>
-                            updateSupplierDraft(entry.id, {
-                              isActive: event.target.checked,
-                            })
-                          }
-                        />
-                        <span>Active</span>
-                      </label>
-                    </div>
-                    <label className="field">
-                      <span>Notes</span>
-                      <textarea
-                        className="input textarea"
-                        value={draft.notes}
-                        onChange={(event) =>
-                          updateSupplierDraft(entry.id, {
-                            notes: event.target.value,
-                          })
-                        }
-                      />
-                    </label>
-                    <button
-                      className="btn primary"
-                      type="button"
-                      disabled={!draft.name.trim()}
-                      onClick={() => void saveSupplier(entry)}
-                    >
-                      Save supplier
-                    </button>
-                  </div>
-                );
-              })}
-              {operations?.suppliers.length === 0 ? (
-                <span className="meta">No suppliers yet.</span>
-              ) : null}
-            </div>
-          </article>
-
-          <article className="card grid">
-            <h2>Inventory movement</h2>
-            <div className="list compact-list">
-              {(operations?.inventoryAdjustments ?? []).map((entry) => (
-                <div className="list-item row between" key={entry.id}>
-                  <div>
-                    <strong>
-                      {entry.menuItemName} {signed(entry.quantityDelta)}
-                    </strong>
-                    <p>
-                      {entry.reason}
-                      {entry.stocktakeName ? ` / ${entry.stocktakeName}` : ""}
-                    </p>
-                  </div>
-                  <span className="meta">
-                    {formatDateTime(entry.createdAt)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="card grid">
-            <h2>Stocktakes</h2>
-            <div className="operations-edit-list">
-              {(operations?.stocktakes ?? []).map((entry) => (
-                <div className="operations-record-card" key={entry.id}>
-                  <div className="row between">
-                    <div>
-                      <strong>{entry.name}</strong>
-                      <p>{entry.note || "Applied stock count"}</p>
-                    </div>
-                    <span className="status ok">{entry.status}</span>
-                  </div>
-                  <div className="row between">
-                    <span className="meta">
-                      Counted {formatDateTime(entry.countedAt)}
-                    </span>
-                    <span className="meta">{entry.lines.length} lines</span>
-                  </div>
-                  <div className="list compact-list">
-                    {entry.lines.slice(0, 5).map((line) => (
-                      <div className="row between" key={line.id}>
-                        <span>{line.menuItemName}</span>
-                        <span
-                          className={
-                            line.differenceQuantity === 0
-                              ? "status"
-                              : line.differenceQuantity > 0
-                                ? "status ok"
-                                : "status urgent"
-                          }
-                        >
-                          {line.expectedQuantity}
-                          {" -> "}
-                          {line.countedQuantity} (
-                          {signed(line.differenceQuantity)})
-                        </span>
-                      </div>
-                    ))}
-                    {entry.lines.length > 5 ? (
-                      <span className="meta">
-                        +{entry.lines.length - 5} more lines
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-              {operations?.stocktakes.length === 0 ? (
-                <span className="meta">No stocktakes yet.</span>
-              ) : null}
-            </div>
-          </article>
-
-          <article className="card grid">
-            <h2>Ingredients</h2>
-            <div className="operations-edit-list">
-              {ingredients.map((entry) => {
-                const draft =
-                  ingredientDrafts[entry.id] ?? ingredientForm(entry);
-                return (
-                  <div className="operations-record-card" key={entry.id}>
-                    <div className="row between">
-                      <strong>{entry.name}</strong>
-                      <span
-                        className={
-                          entry.isLowStock
-                            ? "status urgent"
-                            : draft.isActive
-                              ? "status ok"
-                              : "status"
-                        }
-                      >
-                        {entry.isLowStock
-                          ? "Low stock"
-                          : draft.isActive
-                            ? "Active"
-                            : "Inactive"}
-                      </span>
-                    </div>
-                    <div className="row between">
-                      <span className="meta">
-                        {entry.stockQuantity} {entry.unit} on hand
-                      </span>
-                      <span className="meta">
-                        {formatCents(
-                          entry.unitCostCents,
-                          operations?.store.currency,
-                          operations?.store.locale,
-                        )}{" "}
-                        / {entry.unit}
-                      </span>
-                    </div>
-                    <div className="operations-record-grid">
-                      <label className="field">
-                        <span>Name</span>
-                        <input
-                          className="input"
-                          value={draft.name}
-                          onChange={(event) =>
-                            updateIngredientDraft(entry.id, {
-                              name: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Unit</span>
-                        <input
-                          className="input"
-                          value={draft.unit}
-                          onChange={(event) =>
-                            updateIngredientDraft(entry.id, {
-                              unit: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Stock quantity</span>
-                        <input
-                          className="input"
-                          inputMode="numeric"
-                          value={draft.stockQuantity}
-                          onChange={(event) =>
-                            updateIngredientDraft(entry.id, {
-                              stockQuantity: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Unit cost</span>
-                        <input
-                          className="input"
-                          inputMode="numeric"
-                          value={draft.unitCostCents}
-                          onChange={(event) =>
-                            updateIngredientDraft(entry.id, {
-                              unitCostCents: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Low stock threshold</span>
-                        <input
-                          className="input"
-                          inputMode="numeric"
-                          value={draft.lowStockThreshold}
-                          onChange={(event) =>
-                            updateIngredientDraft(entry.id, {
-                              lowStockThreshold: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="mini-check operations-active-check">
-                        <input
-                          type="checkbox"
-                          checked={draft.isActive}
-                          onChange={(event) =>
-                            updateIngredientDraft(entry.id, {
-                              isActive: event.target.checked,
-                            })
-                          }
-                        />
-                        <span>Active</span>
-                      </label>
-                    </div>
-                    <button
-                      className="btn primary"
-                      type="button"
-                      disabled={!draft.name.trim() || !draft.unit.trim()}
-                      onClick={() => void saveIngredient(entry)}
-                    >
-                      Save ingredient
-                    </button>
-                  </div>
-                );
-              })}
-              {ingredients.length === 0 ? (
-                <span className="meta">No ingredients yet.</span>
-              ) : null}
-            </div>
-          </article>
-
-          <article className="card grid">
-            <h2>Recipes</h2>
-            <div className="operations-edit-list">
-              {(operations?.recipes ?? []).map((entry) => (
-                <div className="operations-record-card" key={entry.id}>
-                  <div className="row between">
-                    <div>
-                      <strong>{entry.menuItemName}</strong>
-                      <p>
-                        Yield {entry.yieldQuantity} / updated{" "}
-                        {formatDateTime(entry.updatedAt)}
-                      </p>
-                    </div>
-                    <span
-                      className={
-                        entry.marginCents >= 0 ? "status ok" : "status urgent"
+        <section className="grid two">
+          {activeSection === "inventory" ? (
+            <>
+              <form
+                className="card grid"
+                onSubmit={(event) => void submitSupplier(event)}
+              >
+                <h2>Supplier</h2>
+                <label className="field">
+                  <span>Name</span>
+                  <input
+                    className="input"
+                    value={supplier.name}
+                    onChange={(event) =>
+                      setSupplier((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <div className="grid two">
+                  <label className="field">
+                    <span>Contact</span>
+                    <input
+                      className="input"
+                      value={supplier.contactName}
+                      onChange={(event) =>
+                        setSupplier((current) => ({
+                          ...current,
+                          contactName: event.target.value,
+                        }))
                       }
-                    >
-                      {formatBps(entry.marginBps)} margin
-                    </span>
-                  </div>
-                  <div className="row between">
-                    <span className="meta">
-                      Price{" "}
-                      {formatCents(
-                        entry.menuItemPriceCents,
-                        operations?.store.currency,
-                        operations?.store.locale,
-                      )}
-                    </span>
-                    <span className="meta">
-                      Cost{" "}
-                      {formatCents(
-                        entry.costCents,
-                        operations?.store.currency,
-                        operations?.store.locale,
-                      )}{" "}
-                      / margin{" "}
-                      {formatCents(
-                        entry.marginCents,
-                        operations?.store.currency,
-                        operations?.store.locale,
-                      )}
-                    </span>
-                  </div>
-                  {entry.note ? <p>{entry.note}</p> : null}
-                  <div className="list compact-list">
-                    {entry.lines.map((line) => (
-                      <div className="row between" key={line.id}>
-                        <span>
-                          {line.ingredientName} x {line.quantity} {line.unit}
-                        </span>
-                        <span className="meta">
-                          {formatCents(
-                            line.costCents,
-                            operations?.store.currency,
-                            operations?.store.locale,
-                          )}
-                        </span>
-                      </div>
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Phone</span>
+                    <input
+                      className="input"
+                      value={supplier.phone}
+                      onChange={(event) =>
+                        setSupplier((current) => ({
+                          ...current,
+                          phone: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <label className="field">
+                  <span>Email</span>
+                  <input
+                    className="input"
+                    value={supplier.email}
+                    onChange={(event) =>
+                      setSupplier((current) => ({
+                        ...current,
+                        email: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Notes</span>
+                  <textarea
+                    className="input textarea"
+                    value={supplier.notes}
+                    onChange={(event) =>
+                      setSupplier((current) => ({
+                        ...current,
+                        notes: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <button
+                  className="btn primary"
+                  disabled={!supplier.name.trim()}
+                >
+                  Save supplier
+                </button>
+              </form>
+
+              <form
+                className="card grid"
+                onSubmit={(event) => void submitAdjustment(event)}
+              >
+                <h2>Inventory adjustment</h2>
+                <label className="field">
+                  <span>Menu item</span>
+                  <select
+                    className="select"
+                    value={adjustment.menuItemId}
+                    onChange={(event) =>
+                      setAdjustment((current) => ({
+                        ...current,
+                        menuItemId: event.target.value,
+                      }))
+                    }
+                  >
+                    {menuItems.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.name}
+                      </option>
                     ))}
-                  </div>
+                  </select>
+                </label>
+                <div className="grid two">
+                  <label className="field">
+                    <span>Quantity delta</span>
+                    <input
+                      className="input"
+                      value={adjustment.quantityDelta}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        setAdjustment((current) => ({
+                          ...current,
+                          quantityDelta: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Reason</span>
+                    <input
+                      className="input"
+                      value={adjustment.reason}
+                      onChange={(event) =>
+                        setAdjustment((current) => ({
+                          ...current,
+                          reason: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <label className="field">
+                  <span>Note</span>
+                  <textarea
+                    className="input textarea"
+                    value={adjustment.note}
+                    onChange={(event) =>
+                      setAdjustment((current) => ({
+                        ...current,
+                        note: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <button
+                  className="btn primary"
+                  disabled={!adjustment.menuItemId || !adjustment.reason.trim()}
+                >
+                  Save adjustment
+                </button>
+              </form>
+
+              <form
+                className="card grid"
+                onSubmit={(event) => void submitStocktake(event)}
+              >
+                <div className="row between">
+                  <h2>Stocktake</h2>
                   <button
                     className="btn ghost"
                     type="button"
-                    onClick={() => setRecipe(recipeToForm(entry))}
+                    onClick={addStocktakeLine}
                   >
-                    Edit recipe
+                    Add line
                   </button>
                 </div>
-              ))}
-              {operations?.recipes.length === 0 ? (
-                <span className="meta">No recipes yet.</span>
-              ) : null}
-            </div>
-          </article>
-
-          <article className="card grid">
-            <h2>Feedback</h2>
-            <div className="operations-edit-list">
-              {(operations?.feedback ?? []).map((entry) => (
-                <div className="operations-record-card" key={entry.id}>
-                  <div className="row between">
-                    <div>
-                      <strong>{stars(entry.rating)}</strong>
-                      <p>
-                        Table {entry.tableNumber ?? "-"}
-                        {entry.orderId
-                          ? ` / order ${entry.orderId.slice(0, 8)}`
-                          : ""}
-                      </p>
-                    </div>
-                    <span className={feedbackStatusClass(entry.status)}>
-                      {entry.status}
-                    </span>
-                  </div>
-                  <div className="row between">
-                    <span className="meta">
-                      {entry.memberPhone ??
-                        entry.customerPhone ??
-                        "No member phone"}
-                    </span>
-                    <span className="meta">
-                      {formatDateTime(entry.createdAt)}
-                    </span>
-                  </div>
-                  {entry.tags.length > 0 ? (
-                    <span className="meta">
-                      {entry.tags.map(feedbackTagLabel).join(" / ")}
-                    </span>
-                  ) : null}
-                  {entry.comment ? <p>{entry.comment}</p> : null}
-                  <div className="row">
-                    <button
-                      className="btn ghost"
-                      type="button"
-                      disabled={entry.status === "NEW"}
-                      onClick={() => void updateFeedbackStatus(entry, "NEW")}
-                    >
-                      Reopen
-                    </button>
-                    <button
-                      className="btn ghost"
-                      type="button"
-                      disabled={entry.status === "REVIEWED"}
-                      onClick={() =>
-                        void updateFeedbackStatus(entry, "REVIEWED")
+                <div className="grid two">
+                  <label className="field">
+                    <span>Name</span>
+                    <input
+                      className="input"
+                      value={stocktake.name}
+                      placeholder="Daily count"
+                      onChange={(event) =>
+                        setStocktake((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
                       }
-                    >
-                      Review
-                    </button>
-                    <button
-                      className="btn primary"
-                      type="button"
-                      disabled={entry.status === "RESOLVED"}
-                      onClick={() =>
-                        void updateFeedbackStatus(entry, "RESOLVED")
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Counted at</span>
+                    <input
+                      className="input"
+                      type="datetime-local"
+                      value={stocktake.countedAt}
+                      onChange={(event) =>
+                        setStocktake((current) => ({
+                          ...current,
+                          countedAt: event.target.value,
+                        }))
                       }
-                    >
-                      Resolve
-                    </button>
-                  </div>
+                    />
+                  </label>
                 </div>
-              ))}
-              {operations?.feedback.length === 0 ? (
-                <span className="meta">No feedback yet.</span>
-              ) : null}
-            </div>
-          </article>
+                <div className="operations-edit-list">
+                  {stocktake.lines.map((line, index) => {
+                    const item = trackedMenuItems.find(
+                      (entry) => entry.id === line.menuItemId,
+                    );
+                    return (
+                      <div
+                        className="operations-record-card"
+                        key={`${line.menuItemId}-${index}`}
+                      >
+                        <div className="operations-record-grid">
+                          <label className="field">
+                            <span>Menu item</span>
+                            <select
+                              className="select"
+                              value={line.menuItemId}
+                              onChange={(event) => {
+                                const nextItem = trackedMenuItems.find(
+                                  (entry) => entry.id === event.target.value,
+                                );
+                                updateStocktakeLine(index, {
+                                  menuItemId: event.target.value,
+                                  countedQuantity: String(
+                                    nextItem?.stockQuantity ?? 0,
+                                  ),
+                                });
+                              }}
+                            >
+                              {trackedMenuItems.map((entry) => (
+                                <option value={entry.id} key={entry.id}>
+                                  {entry.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Expected</span>
+                            <input
+                              className="input"
+                              value={stockLabel(item?.stockQuantity)}
+                              disabled
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Counted</span>
+                            <input
+                              className="input"
+                              inputMode="numeric"
+                              value={line.countedQuantity}
+                              onChange={(event) =>
+                                updateStocktakeLine(index, {
+                                  countedQuantity: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Line note</span>
+                            <input
+                              className="input"
+                              value={line.note}
+                              onChange={(event) =>
+                                updateStocktakeLine(index, {
+                                  note: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+                        <button
+                          className="btn ghost"
+                          type="button"
+                          disabled={stocktake.lines.length <= 1}
+                          onClick={() => removeStocktakeLine(index)}
+                        >
+                          Remove line
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <label className="field">
+                  <span>Note</span>
+                  <textarea
+                    className="input textarea"
+                    value={stocktake.note}
+                    onChange={(event) =>
+                      setStocktake((current) => ({
+                        ...current,
+                        note: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <button
+                  className="btn primary"
+                  disabled={
+                    !stocktake.name.trim() ||
+                    trackedMenuItems.length === 0 ||
+                    stocktake.lines.every((line) => !line.menuItemId)
+                  }
+                >
+                  Apply stocktake
+                </button>
+              </form>
 
-          <article className="card grid">
-            <h2>Members</h2>
-            <div className="operations-edit-list">
-              {(operations?.members ?? []).map((entry) => {
-                const draft = memberDrafts[entry.id] ?? memberForm(entry);
-                return (
-                  <div className="operations-record-card" key={entry.id}>
-                    <div className="row between">
-                      <strong>{entry.name || entry.phone}</strong>
-                      <div className="row">
-                        <span className="status ok">{entry.points} pts</span>
-                        <span className="status">
-                          {entry.paymentCount ?? 0} payments
+              <form
+                className="card grid"
+                onSubmit={(event) => void submitIngredient(event)}
+              >
+                <h2>Ingredient</h2>
+                <div className="grid two">
+                  <label className="field">
+                    <span>Name</span>
+                    <input
+                      className="input"
+                      value={ingredient.name}
+                      onChange={(event) =>
+                        setIngredient((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Unit</span>
+                    <input
+                      className="input"
+                      value={ingredient.unit}
+                      placeholder="g, ml, unit"
+                      onChange={(event) =>
+                        setIngredient((current) => ({
+                          ...current,
+                          unit: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="grid two">
+                  <label className="field">
+                    <span>Stock quantity</span>
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={ingredient.stockQuantity}
+                      onChange={(event) =>
+                        setIngredient((current) => ({
+                          ...current,
+                          stockQuantity: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Unit cost</span>
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={ingredient.unitCostCents}
+                      onChange={(event) =>
+                        setIngredient((current) => ({
+                          ...current,
+                          unitCostCents: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Low stock threshold</span>
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={ingredient.lowStockThreshold}
+                      onChange={(event) =>
+                        setIngredient((current) => ({
+                          ...current,
+                          lowStockThreshold: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field checkbox-field">
+                    <span>Active</span>
+                    <input
+                      type="checkbox"
+                      checked={ingredient.isActive}
+                      onChange={(event) =>
+                        setIngredient((current) => ({
+                          ...current,
+                          isActive: event.target.checked,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <button
+                  className="btn primary"
+                  disabled={!ingredient.name.trim() || !ingredient.unit.trim()}
+                >
+                  Save ingredient
+                </button>
+              </form>
+
+              <form
+                className="card grid"
+                onSubmit={(event) => void submitRecipe(event)}
+              >
+                <div className="row between">
+                  <h2>Recipe</h2>
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={addRecipeLine}
+                  >
+                    Add line
+                  </button>
+                </div>
+                <label className="field">
+                  <span>Menu item</span>
+                  <select
+                    className="select"
+                    value={recipe.menuItemId}
+                    onChange={(event) =>
+                      selectRecipeMenuItem(event.target.value)
+                    }
+                  >
+                    {recipeMenuItems.length === 0 ? (
+                      <option value="">No available menu items</option>
+                    ) : null}
+                    {recipeMenuItems.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="grid two">
+                  <label className="field">
+                    <span>Yield quantity</span>
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={recipe.yieldQuantity}
+                      onChange={(event) =>
+                        setRecipe((current) => ({
+                          ...current,
+                          yieldQuantity: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Note</span>
+                    <input
+                      className="input"
+                      value={recipe.note}
+                      onChange={(event) =>
+                        setRecipe((current) => ({
+                          ...current,
+                          note: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="operations-edit-list">
+                  {recipe.lines.map((line, index) => {
+                    const selectedIngredient = ingredients.find(
+                      (entry) => entry.id === line.ingredientId,
+                    );
+                    const lineCostCents =
+                      (selectedIngredient?.unitCostCents ?? 0) *
+                      Number(line.quantity || 0);
+                    return (
+                      <div
+                        className="operations-record-card"
+                        key={`${line.ingredientId}-${index}`}
+                      >
+                        <div className="operations-record-grid">
+                          <label className="field">
+                            <span>Ingredient</span>
+                            <select
+                              className="select"
+                              value={line.ingredientId}
+                              onChange={(event) =>
+                                updateRecipeLine(index, {
+                                  ingredientId: event.target.value,
+                                })
+                              }
+                            >
+                              {ingredients.length === 0 ? (
+                                <option value="">No ingredients</option>
+                              ) : null}
+                              {ingredients.map((entry) => (
+                                <option value={entry.id} key={entry.id}>
+                                  {entry.name}
+                                  {entry.isActive ? "" : " (inactive)"}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Quantity</span>
+                            <input
+                              className="input"
+                              inputMode="numeric"
+                              value={line.quantity}
+                              onChange={(event) =>
+                                updateRecipeLine(index, {
+                                  quantity: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Line note</span>
+                            <input
+                              className="input"
+                              value={line.note}
+                              onChange={(event) =>
+                                updateRecipeLine(index, {
+                                  note: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Line cost</span>
+                            <input
+                              className="input"
+                              value={formatCents(
+                                lineCostCents,
+                                operations?.store.currency,
+                                operations?.store.locale,
+                              )}
+                              disabled
+                            />
+                          </label>
+                        </div>
+                        <button
+                          className="btn ghost"
+                          type="button"
+                          disabled={recipe.lines.length <= 1}
+                          onClick={() => removeRecipeLine(index)}
+                        >
+                          Remove line
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  className="btn primary"
+                  disabled={
+                    !recipe.menuItemId ||
+                    ingredients.length === 0 ||
+                    recipe.lines.every((line) => !line.ingredientId)
+                  }
+                >
+                  Save recipe
+                </button>
+              </form>
+            </>
+          ) : null}
+          {activeSection === "customers" ? (
+            <>
+              <form
+                className="card grid"
+                onSubmit={(event) => void submitMember(event)}
+              >
+                <h2>Member</h2>
+                <label className="field">
+                  <span>Phone</span>
+                  <input
+                    className="input"
+                    value={member.phone}
+                    onChange={(event) =>
+                      setMember((current) => ({
+                        ...current,
+                        phone: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <div className="grid two">
+                  <label className="field">
+                    <span>Name</span>
+                    <input
+                      className="input"
+                      value={member.name}
+                      onChange={(event) =>
+                        setMember((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Points</span>
+                    <input
+                      className="input"
+                      value={member.points}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        setMember((current) => ({
+                          ...current,
+                          points: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <label className="field">
+                  <span>Email</span>
+                  <input
+                    className="input"
+                    value={member.email}
+                    onChange={(event) =>
+                      setMember((current) => ({
+                        ...current,
+                        email: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <button className="btn primary" disabled={!member.phone.trim()}>
+                  Save member
+                </button>
+              </form>
+
+              <form
+                className="card grid"
+                onSubmit={(event) => void submitCoupon(event)}
+              >
+                <h2>Coupon</h2>
+                <div className="grid two">
+                  <label className="field">
+                    <span>Code</span>
+                    <input
+                      className="input"
+                      value={coupon.code}
+                      onChange={(event) =>
+                        setCoupon((current) => ({
+                          ...current,
+                          code: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Type</span>
+                    <select
+                      className="select"
+                      value={coupon.discountType}
+                      onChange={(event) =>
+                        setCoupon((current) => ({
+                          ...current,
+                          discountType: event.target
+                            .value as CouponForm["discountType"],
+                        }))
+                      }
+                    >
+                      <option value="PERCENT">Percent</option>
+                      <option value="AMOUNT">Amount</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="grid two">
+                  <label className="field">
+                    <span>Value</span>
+                    <input
+                      className="input"
+                      value={coupon.discountValue}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        setCoupon((current) => ({
+                          ...current,
+                          discountValue: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Minimum subtotal</span>
+                    <input
+                      className="input"
+                      value={coupon.minimumSubtotalCents}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        setCoupon((current) => ({
+                          ...current,
+                          minimumSubtotalCents: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field checkbox-field">
+                    <span>Active</span>
+                    <input
+                      type="checkbox"
+                      checked={coupon.isActive}
+                      onChange={(event) =>
+                        setCoupon((current) => ({
+                          ...current,
+                          isActive: event.target.checked,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="grid two">
+                  <label className="field">
+                    <span>Starts</span>
+                    <input
+                      className="input"
+                      type="datetime-local"
+                      value={coupon.startsAt}
+                      onChange={(event) =>
+                        setCoupon((current) => ({
+                          ...current,
+                          startsAt: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Ends</span>
+                    <input
+                      className="input"
+                      type="datetime-local"
+                      value={coupon.endsAt}
+                      onChange={(event) =>
+                        setCoupon((current) => ({
+                          ...current,
+                          endsAt: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <button className="btn primary" disabled={!coupon.code.trim()}>
+                  Save coupon
+                </button>
+              </form>
+            </>
+          ) : null}
+          {activeSection === "controls" ? (
+            <>
+              <form
+                className="card grid"
+                onSubmit={(event) => void submitKds(event)}
+              >
+                <h2>KDS device</h2>
+                <div className="grid two">
+                  <label className="field">
+                    <span>Name</span>
+                    <input
+                      className="input"
+                      value={kds.name}
+                      onChange={(event) =>
+                        setKds((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Station</span>
+                    <input
+                      className="input"
+                      value={kds.station}
+                      onChange={(event) =>
+                        setKds((current) => ({
+                          ...current,
+                          station: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <label className="field">
+                  <span>Token</span>
+                  <input
+                    className="input"
+                    value={kds.token}
+                    placeholder="Auto-generated"
+                    onChange={(event) =>
+                      setKds((current) => ({
+                        ...current,
+                        token: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field checkbox-field">
+                  <span>Active</span>
+                  <input
+                    type="checkbox"
+                    checked={kds.isActive}
+                    onChange={(event) =>
+                      setKds((current) => ({
+                        ...current,
+                        isActive: event.target.checked,
+                      }))
+                    }
+                  />
+                </label>
+                <button className="btn primary" disabled={!kds.name.trim()}>
+                  Save KDS device
+                </button>
+              </form>
+            </>
+          ) : null}
+        </section>
+
+        <section className="grid two operations-section">
+          {activeSection === "inventory" ? (
+            <>
+              <article className="card grid">
+                <h2>Suppliers</h2>
+                <div className="operations-edit-list">
+                  {(operations?.suppliers ?? []).map((entry) => {
+                    const draft =
+                      supplierDrafts[entry.id] ?? supplierForm(entry);
+                    return (
+                      <div className="operations-record-card" key={entry.id}>
+                        <div className="row between">
+                          <strong>{entry.name}</strong>
+                          <span
+                            className={draft.isActive ? "status ok" : "status"}
+                          >
+                            {draft.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                        <div className="operations-record-grid">
+                          <label className="field">
+                            <span>Name</span>
+                            <input
+                              className="input"
+                              value={draft.name}
+                              onChange={(event) =>
+                                updateSupplierDraft(entry.id, {
+                                  name: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Contact</span>
+                            <input
+                              className="input"
+                              value={draft.contactName}
+                              onChange={(event) =>
+                                updateSupplierDraft(entry.id, {
+                                  contactName: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Phone</span>
+                            <input
+                              className="input"
+                              value={draft.phone}
+                              onChange={(event) =>
+                                updateSupplierDraft(entry.id, {
+                                  phone: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Email</span>
+                            <input
+                              className="input"
+                              value={draft.email}
+                              onChange={(event) =>
+                                updateSupplierDraft(entry.id, {
+                                  email: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="mini-check operations-active-check">
+                            <input
+                              type="checkbox"
+                              checked={draft.isActive}
+                              onChange={(event) =>
+                                updateSupplierDraft(entry.id, {
+                                  isActive: event.target.checked,
+                                })
+                              }
+                            />
+                            <span>Active</span>
+                          </label>
+                        </div>
+                        <label className="field">
+                          <span>Notes</span>
+                          <textarea
+                            className="input textarea"
+                            value={draft.notes}
+                            onChange={(event) =>
+                              updateSupplierDraft(entry.id, {
+                                notes: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <button
+                          className="btn primary"
+                          type="button"
+                          disabled={!draft.name.trim()}
+                          onClick={() => void saveSupplier(entry)}
+                        >
+                          Save supplier
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {operations?.suppliers.length === 0 ? (
+                    <span className="meta">No suppliers yet.</span>
+                  ) : null}
+                </div>
+              </article>
+
+              <article className="card grid">
+                <h2>Inventory movement</h2>
+                <div className="list compact-list">
+                  {(operations?.inventoryAdjustments ?? []).map((entry) => (
+                    <div className="list-item row between" key={entry.id}>
+                      <div>
+                        <strong>
+                          {entry.menuItemName} {signed(entry.quantityDelta)}
+                        </strong>
+                        <p>
+                          {entry.reason}
+                          {entry.stocktakeName
+                            ? ` / ${entry.stocktakeName}`
+                            : ""}
+                        </p>
+                      </div>
+                      <span className="meta">
+                        {formatDateTime(entry.createdAt)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="card grid">
+                <h2>Stocktakes</h2>
+                <div className="operations-edit-list">
+                  {(operations?.stocktakes ?? []).map((entry) => (
+                    <div className="operations-record-card" key={entry.id}>
+                      <div className="row between">
+                        <div>
+                          <strong>{entry.name}</strong>
+                          <p>{entry.note || "Applied stock count"}</p>
+                        </div>
+                        <span className="status ok">{entry.status}</span>
+                      </div>
+                      <div className="row between">
+                        <span className="meta">
+                          Counted {formatDateTime(entry.countedAt)}
                         </span>
+                        <span className="meta">{entry.lines.length} lines</span>
+                      </div>
+                      <div className="list compact-list">
+                        {entry.lines.slice(0, 5).map((line) => (
+                          <div className="row between" key={line.id}>
+                            <span>{line.menuItemName}</span>
+                            <span
+                              className={
+                                line.differenceQuantity === 0
+                                  ? "status"
+                                  : line.differenceQuantity > 0
+                                    ? "status ok"
+                                    : "status urgent"
+                              }
+                            >
+                              {line.expectedQuantity}
+                              {" -> "}
+                              {line.countedQuantity} (
+                              {signed(line.differenceQuantity)})
+                            </span>
+                          </div>
+                        ))}
+                        {entry.lines.length > 5 ? (
+                          <span className="meta">
+                            +{entry.lines.length - 5} more lines
+                          </span>
+                        ) : null}
                       </div>
                     </div>
-                    <div className="row between">
-                      <span className="meta">
-                        Spend{" "}
-                        {formatCents(
-                          entry.totalSpendCents ?? 0,
-                          operations?.store.currency,
-                          operations?.store.locale,
-                        )}
-                      </span>
-                      <span className="meta">
-                        Last {formatDateTime(entry.lastPaidAt)}
-                      </span>
-                    </div>
-                    <div className="row">
-                      <span className="status">
-                        {entry.orderCount ?? 0} orders
-                      </span>
-                      <span className="status">
-                        {entry.feedbackCount ?? 0} feedback
-                      </span>
-                      {entry.lastFeedbackRating ? (
-                        <span className="status ok">
-                          Last {stars(entry.lastFeedbackRating)}
+                  ))}
+                  {operations?.stocktakes.length === 0 ? (
+                    <span className="meta">No stocktakes yet.</span>
+                  ) : null}
+                </div>
+              </article>
+
+              <article className="card grid">
+                <h2>Ingredients</h2>
+                <div className="operations-edit-list">
+                  {ingredients.map((entry) => {
+                    const draft =
+                      ingredientDrafts[entry.id] ?? ingredientForm(entry);
+                    return (
+                      <div className="operations-record-card" key={entry.id}>
+                        <div className="row between">
+                          <strong>{entry.name}</strong>
+                          <span
+                            className={
+                              entry.isLowStock
+                                ? "status urgent"
+                                : draft.isActive
+                                  ? "status ok"
+                                  : "status"
+                            }
+                          >
+                            {entry.isLowStock
+                              ? "Low stock"
+                              : draft.isActive
+                                ? "Active"
+                                : "Inactive"}
+                          </span>
+                        </div>
+                        <div className="row between">
+                          <span className="meta">
+                            {entry.stockQuantity} {entry.unit} on hand
+                          </span>
+                          <span className="meta">
+                            {formatCents(
+                              entry.unitCostCents,
+                              operations?.store.currency,
+                              operations?.store.locale,
+                            )}{" "}
+                            / {entry.unit}
+                          </span>
+                        </div>
+                        <div className="operations-record-grid">
+                          <label className="field">
+                            <span>Name</span>
+                            <input
+                              className="input"
+                              value={draft.name}
+                              onChange={(event) =>
+                                updateIngredientDraft(entry.id, {
+                                  name: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Unit</span>
+                            <input
+                              className="input"
+                              value={draft.unit}
+                              onChange={(event) =>
+                                updateIngredientDraft(entry.id, {
+                                  unit: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Stock quantity</span>
+                            <input
+                              className="input"
+                              inputMode="numeric"
+                              value={draft.stockQuantity}
+                              onChange={(event) =>
+                                updateIngredientDraft(entry.id, {
+                                  stockQuantity: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Unit cost</span>
+                            <input
+                              className="input"
+                              inputMode="numeric"
+                              value={draft.unitCostCents}
+                              onChange={(event) =>
+                                updateIngredientDraft(entry.id, {
+                                  unitCostCents: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Low stock threshold</span>
+                            <input
+                              className="input"
+                              inputMode="numeric"
+                              value={draft.lowStockThreshold}
+                              onChange={(event) =>
+                                updateIngredientDraft(entry.id, {
+                                  lowStockThreshold: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="mini-check operations-active-check">
+                            <input
+                              type="checkbox"
+                              checked={draft.isActive}
+                              onChange={(event) =>
+                                updateIngredientDraft(entry.id, {
+                                  isActive: event.target.checked,
+                                })
+                              }
+                            />
+                            <span>Active</span>
+                          </label>
+                        </div>
+                        <button
+                          className="btn primary"
+                          type="button"
+                          disabled={!draft.name.trim() || !draft.unit.trim()}
+                          onClick={() => void saveIngredient(entry)}
+                        >
+                          Save ingredient
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {ingredients.length === 0 ? (
+                    <span className="meta">No ingredients yet.</span>
+                  ) : null}
+                </div>
+              </article>
+
+              <article className="card grid">
+                <h2>Recipes</h2>
+                <div className="operations-edit-list">
+                  {(operations?.recipes ?? []).map((entry) => (
+                    <div className="operations-record-card" key={entry.id}>
+                      <div className="row between">
+                        <div>
+                          <strong>{entry.menuItemName}</strong>
+                          <p>
+                            Yield {entry.yieldQuantity} / updated{" "}
+                            {formatDateTime(entry.updatedAt)}
+                          </p>
+                        </div>
+                        <span
+                          className={
+                            entry.marginCents >= 0
+                              ? "status ok"
+                              : "status urgent"
+                          }
+                        >
+                          {formatBps(entry.marginBps)} margin
                         </span>
-                      ) : null}
-                    </div>
-                    <div className="operations-record-grid">
-                      <label className="field">
-                        <span>Phone</span>
-                        <input
-                          className="input"
-                          value={draft.phone}
-                          onChange={(event) =>
-                            updateMemberDraft(entry.id, {
-                              phone: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Name</span>
-                        <input
-                          className="input"
-                          value={draft.name}
-                          onChange={(event) =>
-                            updateMemberDraft(entry.id, {
-                              name: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Email</span>
-                        <input
-                          className="input"
-                          value={draft.email}
-                          onChange={(event) =>
-                            updateMemberDraft(entry.id, {
-                              email: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Points</span>
-                        <input
-                          className="input"
-                          inputMode="numeric"
-                          value={draft.points}
-                          onChange={(event) =>
-                            updateMemberDraft(entry.id, {
-                              points: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                    <div className="grid two">
+                      </div>
+                      <div className="row between">
+                        <span className="meta">
+                          Price{" "}
+                          {formatCents(
+                            entry.menuItemPriceCents,
+                            operations?.store.currency,
+                            operations?.store.locale,
+                          )}
+                        </span>
+                        <span className="meta">
+                          Cost{" "}
+                          {formatCents(
+                            entry.costCents,
+                            operations?.store.currency,
+                            operations?.store.locale,
+                          )}{" "}
+                          / margin{" "}
+                          {formatCents(
+                            entry.marginCents,
+                            operations?.store.currency,
+                            operations?.store.locale,
+                          )}
+                        </span>
+                      </div>
+                      {entry.note ? <p>{entry.note}</p> : null}
                       <div className="list compact-list">
-                        <strong>Recent orders</strong>
-                        {(entry.recentOrders ?? []).slice(0, 3).map((order) => (
-                          <div className="row between" key={order.id}>
+                        {entry.lines.map((line) => (
+                          <div className="row between" key={line.id}>
                             <span>
-                              {order.id.slice(0, 8)} / table{" "}
-                              {order.tableNumber ?? "-"}
+                              {line.ingredientName} x {line.quantity}{" "}
+                              {line.unit}
                             </span>
                             <span className="meta">
                               {formatCents(
-                                order.totalCents,
+                                line.costCents,
                                 operations?.store.currency,
                                 operations?.store.locale,
                               )}
                             </span>
                           </div>
                         ))}
-                        {(entry.recentOrders ?? []).length === 0 ? (
-                          <span className="meta">No orders.</span>
-                        ) : null}
                       </div>
-                      <div className="list compact-list">
-                        <strong>Recent payments</strong>
-                        {(entry.recentPayments ?? [])
-                          .slice(0, 3)
-                          .map((payment) => (
-                            <div className="row between" key={payment.id}>
-                              <span>{payment.method}</span>
-                              <span className="meta">
-                                {formatCents(
-                                  payment.amountCents,
-                                  operations?.store.currency,
-                                  operations?.store.locale,
-                                )}{" "}
-                                / {payment.pointsEarned} pts
-                              </span>
-                            </div>
-                          ))}
-                        {(entry.recentPayments ?? []).length === 0 ? (
-                          <span className="meta">No payments.</span>
-                        ) : null}
-                      </div>
+                      <button
+                        className="btn ghost"
+                        type="button"
+                        onClick={() => setRecipe(recipeToForm(entry))}
+                      >
+                        Edit recipe
+                      </button>
                     </div>
-                    <div className="grid two">
-                      <div className="list compact-list">
-                        <strong>Recent coupons</strong>
-                        {(entry.recentCoupons ?? [])
-                          .slice(0, 3)
-                          .map((couponEntry) => (
-                            <div className="row between" key={couponEntry.id}>
-                              <span>{couponEntry.code}</span>
-                              <span className="meta">
-                                -
-                                {formatCents(
-                                  couponEntry.discountCents,
-                                  operations?.store.currency,
-                                  operations?.store.locale,
-                                )}
-                              </span>
-                            </div>
-                          ))}
-                        {(entry.recentCoupons ?? []).length === 0 ? (
-                          <span className="meta">No coupon redemptions.</span>
-                        ) : null}
+                  ))}
+                  {operations?.recipes.length === 0 ? (
+                    <span className="meta">No recipes yet.</span>
+                  ) : null}
+                </div>
+              </article>
+            </>
+          ) : null}
+          {activeSection === "customers" ? (
+            <>
+              <article className="card grid">
+                <h2>Feedback</h2>
+                <div className="operations-edit-list">
+                  {(operations?.feedback ?? []).map((entry) => (
+                    <div className="operations-record-card" key={entry.id}>
+                      <div className="row between">
+                        <div>
+                          <strong>{stars(entry.rating)}</strong>
+                          <p>
+                            Table {entry.tableNumber ?? "-"}
+                            {entry.orderId
+                              ? ` / order ${entry.orderId.slice(0, 8)}`
+                              : ""}
+                          </p>
+                        </div>
+                        <span className={feedbackStatusClass(entry.status)}>
+                          {entry.status}
+                        </span>
                       </div>
-                      <div className="list compact-list">
-                        <strong>Recent feedback</strong>
-                        {(entry.recentFeedback ?? [])
-                          .slice(0, 3)
-                          .map((feedbackEntry) => (
-                            <div className="row between" key={feedbackEntry.id}>
-                              <span>
-                                {stars(feedbackEntry.rating)}
-                                {feedbackEntry.tags.length > 0
-                                  ? ` / ${feedbackEntry.tags
-                                      .map(feedbackTagLabel)
-                                      .join(", ")}`
-                                  : ""}
-                              </span>
-                              <span
-                                className={feedbackStatusClass(
-                                  feedbackEntry.status,
-                                )}
-                              >
-                                {feedbackEntry.status}
-                              </span>
-                            </div>
-                          ))}
-                        {(entry.recentFeedback ?? []).length === 0 ? (
-                          <span className="meta">No feedback.</span>
-                        ) : null}
+                      <div className="row between">
+                        <span className="meta">
+                          {entry.memberPhone ??
+                            entry.customerPhone ??
+                            "No member phone"}
+                        </span>
+                        <span className="meta">
+                          {formatDateTime(entry.createdAt)}
+                        </span>
                       </div>
-                    </div>
-                    <button
-                      className="btn primary"
-                      type="button"
-                      disabled={!draft.phone.trim()}
-                      onClick={() => void saveMember(entry)}
-                    >
-                      Save member
-                    </button>
-                  </div>
-                );
-              })}
-              {operations?.members.length === 0 ? (
-                <span className="meta">No members yet.</span>
-              ) : null}
-            </div>
-          </article>
-
-          <article className="card grid">
-            <h2>Coupons</h2>
-            <div className="operations-edit-list">
-              {(operations?.coupons ?? []).map((entry) => {
-                const draft = couponDrafts[entry.id] ?? couponForm(entry);
-                return (
-                  <div className="operations-record-card" key={entry.id}>
-                    <div className="row between">
-                      <strong>{entry.code}</strong>
+                      {entry.tags.length > 0 ? (
+                        <span className="meta">
+                          {entry.tags.map(feedbackTagLabel).join(" / ")}
+                        </span>
+                      ) : null}
+                      {entry.comment ? <p>{entry.comment}</p> : null}
                       <div className="row">
-                        <span
-                          className={draft.isActive ? "status ok" : "status"}
+                        <button
+                          className="btn ghost"
+                          type="button"
+                          disabled={entry.status === "NEW"}
+                          onClick={() =>
+                            void updateFeedbackStatus(entry, "NEW")
+                          }
                         >
-                          {draft.isActive ? "Active" : "Inactive"}
-                        </span>
-                        <span className="status">
-                          {entry.redemptionCount ?? 0} used
-                        </span>
+                          Reopen
+                        </button>
+                        <button
+                          className="btn ghost"
+                          type="button"
+                          disabled={entry.status === "REVIEWED"}
+                          onClick={() =>
+                            void updateFeedbackStatus(entry, "REVIEWED")
+                          }
+                        >
+                          Review
+                        </button>
+                        <button
+                          className="btn primary"
+                          type="button"
+                          disabled={entry.status === "RESOLVED"}
+                          onClick={() =>
+                            void updateFeedbackStatus(entry, "RESOLVED")
+                          }
+                        >
+                          Resolve
+                        </button>
                       </div>
                     </div>
-                    <div className="meta">
-                      Minimum{" "}
-                      {formatCents(
-                        entry.minimumSubtotalCents,
-                        operations?.store.currency,
-                        operations?.store.locale,
-                      )}
-                    </div>
-                    <div className="operations-record-grid">
-                      <label className="field">
-                        <span>Code</span>
-                        <input
-                          className="input"
-                          value={draft.code}
-                          onChange={(event) =>
-                            updateCouponDraft(entry.id, {
-                              code: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Type</span>
-                        <select
-                          className="select"
-                          value={draft.discountType}
-                          onChange={(event) =>
-                            updateCouponDraft(entry.id, {
-                              discountType: event.target
-                                .value as CouponForm["discountType"],
-                            })
-                          }
-                        >
-                          <option value="PERCENT">Percent</option>
-                          <option value="AMOUNT">Amount</option>
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Value</span>
-                        <input
-                          className="input"
-                          inputMode="numeric"
-                          value={draft.discountValue}
-                          onChange={(event) =>
-                            updateCouponDraft(entry.id, {
-                              discountValue: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Minimum subtotal</span>
-                        <input
-                          className="input"
-                          inputMode="numeric"
-                          value={draft.minimumSubtotalCents}
-                          onChange={(event) =>
-                            updateCouponDraft(entry.id, {
-                              minimumSubtotalCents: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="mini-check operations-active-check">
-                        <input
-                          type="checkbox"
-                          checked={draft.isActive}
-                          onChange={(event) =>
-                            updateCouponDraft(entry.id, {
-                              isActive: event.target.checked,
-                            })
-                          }
-                        />
-                        <span>Active</span>
-                      </label>
-                    </div>
-                    <div className="grid two">
-                      <label className="field">
-                        <span>Starts</span>
-                        <input
-                          className="input"
-                          type="datetime-local"
-                          value={draft.startsAt}
-                          onChange={(event) =>
-                            updateCouponDraft(entry.id, {
-                              startsAt: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Ends</span>
-                        <input
-                          className="input"
-                          type="datetime-local"
-                          value={draft.endsAt}
-                          onChange={(event) =>
-                            updateCouponDraft(entry.id, {
-                              endsAt: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                    <button
-                      className="btn primary"
-                      type="button"
-                      disabled={!draft.code.trim()}
-                      onClick={() => void saveCoupon(entry)}
-                    >
-                      Save coupon
-                    </button>
-                  </div>
-                );
-              })}
-              {operations?.coupons.length === 0 ? (
-                <span className="meta">No coupons yet.</span>
-              ) : null}
-            </div>
-          </article>
+                  ))}
+                  {operations?.feedback.length === 0 ? (
+                    <span className="meta">No feedback yet.</span>
+                  ) : null}
+                </div>
+              </article>
 
-          <article className="card grid">
-            <h2>KDS devices</h2>
-            <div className="operations-edit-list">
-              {(operations?.kdsDevices ?? []).map((entry) => {
-                const draft = kdsDrafts[entry.id] ?? kdsForm(entry);
-                return (
-                  <div className="operations-record-card" key={entry.id}>
-                    <div className="row between">
-                      <strong>{entry.name}</strong>
-                      <span className={draft.isActive ? "status ok" : "status"}>
-                        {draft.isActive ? "Active" : "Inactive"}
+              <article className="card grid">
+                <h2>Members</h2>
+                <div className="operations-edit-list">
+                  {(operations?.members ?? []).map((entry) => {
+                    const draft = memberDrafts[entry.id] ?? memberForm(entry);
+                    return (
+                      <div className="operations-record-card" key={entry.id}>
+                        <div className="row between">
+                          <strong>{entry.name || entry.phone}</strong>
+                          <div className="row">
+                            <span className="status ok">
+                              {entry.points} pts
+                            </span>
+                            <span className="status">
+                              {entry.paymentCount ?? 0} payments
+                            </span>
+                          </div>
+                        </div>
+                        <div className="row between">
+                          <span className="meta">
+                            Spend{" "}
+                            {formatCents(
+                              entry.totalSpendCents ?? 0,
+                              operations?.store.currency,
+                              operations?.store.locale,
+                            )}
+                          </span>
+                          <span className="meta">
+                            Last {formatDateTime(entry.lastPaidAt)}
+                          </span>
+                        </div>
+                        <div className="row">
+                          <span className="status">
+                            {entry.orderCount ?? 0} orders
+                          </span>
+                          <span className="status">
+                            {entry.feedbackCount ?? 0} feedback
+                          </span>
+                          {entry.lastFeedbackRating ? (
+                            <span className="status ok">
+                              Last {stars(entry.lastFeedbackRating)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="operations-record-grid">
+                          <label className="field">
+                            <span>Phone</span>
+                            <input
+                              className="input"
+                              value={draft.phone}
+                              onChange={(event) =>
+                                updateMemberDraft(entry.id, {
+                                  phone: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Name</span>
+                            <input
+                              className="input"
+                              value={draft.name}
+                              onChange={(event) =>
+                                updateMemberDraft(entry.id, {
+                                  name: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Email</span>
+                            <input
+                              className="input"
+                              value={draft.email}
+                              onChange={(event) =>
+                                updateMemberDraft(entry.id, {
+                                  email: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Points</span>
+                            <input
+                              className="input"
+                              inputMode="numeric"
+                              value={draft.points}
+                              onChange={(event) =>
+                                updateMemberDraft(entry.id, {
+                                  points: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+                        <div className="grid two">
+                          <div className="list compact-list">
+                            <strong>Recent orders</strong>
+                            {(entry.recentOrders ?? [])
+                              .slice(0, 3)
+                              .map((order) => (
+                                <div className="row between" key={order.id}>
+                                  <span>
+                                    {order.id.slice(0, 8)} / table{" "}
+                                    {order.tableNumber ?? "-"}
+                                  </span>
+                                  <span className="meta">
+                                    {formatCents(
+                                      order.totalCents,
+                                      operations?.store.currency,
+                                      operations?.store.locale,
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            {(entry.recentOrders ?? []).length === 0 ? (
+                              <span className="meta">No orders.</span>
+                            ) : null}
+                          </div>
+                          <div className="list compact-list">
+                            <strong>Recent payments</strong>
+                            {(entry.recentPayments ?? [])
+                              .slice(0, 3)
+                              .map((payment) => (
+                                <div className="row between" key={payment.id}>
+                                  <span>{payment.method}</span>
+                                  <span className="meta">
+                                    {formatCents(
+                                      payment.amountCents,
+                                      operations?.store.currency,
+                                      operations?.store.locale,
+                                    )}{" "}
+                                    / {payment.pointsEarned} pts
+                                  </span>
+                                </div>
+                              ))}
+                            {(entry.recentPayments ?? []).length === 0 ? (
+                              <span className="meta">No payments.</span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="grid two">
+                          <div className="list compact-list">
+                            <strong>Recent coupons</strong>
+                            {(entry.recentCoupons ?? [])
+                              .slice(0, 3)
+                              .map((couponEntry) => (
+                                <div
+                                  className="row between"
+                                  key={couponEntry.id}
+                                >
+                                  <span>{couponEntry.code}</span>
+                                  <span className="meta">
+                                    -
+                                    {formatCents(
+                                      couponEntry.discountCents,
+                                      operations?.store.currency,
+                                      operations?.store.locale,
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            {(entry.recentCoupons ?? []).length === 0 ? (
+                              <span className="meta">
+                                No coupon redemptions.
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="list compact-list">
+                            <strong>Recent feedback</strong>
+                            {(entry.recentFeedback ?? [])
+                              .slice(0, 3)
+                              .map((feedbackEntry) => (
+                                <div
+                                  className="row between"
+                                  key={feedbackEntry.id}
+                                >
+                                  <span>
+                                    {stars(feedbackEntry.rating)}
+                                    {feedbackEntry.tags.length > 0
+                                      ? ` / ${feedbackEntry.tags
+                                          .map(feedbackTagLabel)
+                                          .join(", ")}`
+                                      : ""}
+                                  </span>
+                                  <span
+                                    className={feedbackStatusClass(
+                                      feedbackEntry.status,
+                                    )}
+                                  >
+                                    {feedbackEntry.status}
+                                  </span>
+                                </div>
+                              ))}
+                            {(entry.recentFeedback ?? []).length === 0 ? (
+                              <span className="meta">No feedback.</span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <button
+                          className="btn primary"
+                          type="button"
+                          disabled={!draft.phone.trim()}
+                          onClick={() => void saveMember(entry)}
+                        >
+                          Save member
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {operations?.members.length === 0 ? (
+                    <span className="meta">No members yet.</span>
+                  ) : null}
+                </div>
+              </article>
+
+              <article className="card grid">
+                <h2>Coupons</h2>
+                <div className="operations-edit-list">
+                  {(operations?.coupons ?? []).map((entry) => {
+                    const draft = couponDrafts[entry.id] ?? couponForm(entry);
+                    return (
+                      <div className="operations-record-card" key={entry.id}>
+                        <div className="row between">
+                          <strong>{entry.code}</strong>
+                          <div className="row">
+                            <span
+                              className={
+                                draft.isActive ? "status ok" : "status"
+                              }
+                            >
+                              {draft.isActive ? "Active" : "Inactive"}
+                            </span>
+                            <span className="status">
+                              {entry.redemptionCount ?? 0} used
+                            </span>
+                          </div>
+                        </div>
+                        <div className="meta">
+                          Minimum{" "}
+                          {formatCents(
+                            entry.minimumSubtotalCents,
+                            operations?.store.currency,
+                            operations?.store.locale,
+                          )}
+                        </div>
+                        <div className="operations-record-grid">
+                          <label className="field">
+                            <span>Code</span>
+                            <input
+                              className="input"
+                              value={draft.code}
+                              onChange={(event) =>
+                                updateCouponDraft(entry.id, {
+                                  code: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Type</span>
+                            <select
+                              className="select"
+                              value={draft.discountType}
+                              onChange={(event) =>
+                                updateCouponDraft(entry.id, {
+                                  discountType: event.target
+                                    .value as CouponForm["discountType"],
+                                })
+                              }
+                            >
+                              <option value="PERCENT">Percent</option>
+                              <option value="AMOUNT">Amount</option>
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Value</span>
+                            <input
+                              className="input"
+                              inputMode="numeric"
+                              value={draft.discountValue}
+                              onChange={(event) =>
+                                updateCouponDraft(entry.id, {
+                                  discountValue: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Minimum subtotal</span>
+                            <input
+                              className="input"
+                              inputMode="numeric"
+                              value={draft.minimumSubtotalCents}
+                              onChange={(event) =>
+                                updateCouponDraft(entry.id, {
+                                  minimumSubtotalCents: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="mini-check operations-active-check">
+                            <input
+                              type="checkbox"
+                              checked={draft.isActive}
+                              onChange={(event) =>
+                                updateCouponDraft(entry.id, {
+                                  isActive: event.target.checked,
+                                })
+                              }
+                            />
+                            <span>Active</span>
+                          </label>
+                        </div>
+                        <div className="grid two">
+                          <label className="field">
+                            <span>Starts</span>
+                            <input
+                              className="input"
+                              type="datetime-local"
+                              value={draft.startsAt}
+                              onChange={(event) =>
+                                updateCouponDraft(entry.id, {
+                                  startsAt: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Ends</span>
+                            <input
+                              className="input"
+                              type="datetime-local"
+                              value={draft.endsAt}
+                              onChange={(event) =>
+                                updateCouponDraft(entry.id, {
+                                  endsAt: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+                        <button
+                          className="btn primary"
+                          type="button"
+                          disabled={!draft.code.trim()}
+                          onClick={() => void saveCoupon(entry)}
+                        >
+                          Save coupon
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {operations?.coupons.length === 0 ? (
+                    <span className="meta">No coupons yet.</span>
+                  ) : null}
+                </div>
+              </article>
+            </>
+          ) : null}
+          {activeSection === "controls" ? (
+            <>
+              <article className="card grid">
+                <h2>KDS devices</h2>
+                <div className="operations-edit-list">
+                  {(operations?.kdsDevices ?? []).map((entry) => {
+                    const draft = kdsDrafts[entry.id] ?? kdsForm(entry);
+                    return (
+                      <div className="operations-record-card" key={entry.id}>
+                        <div className="row between">
+                          <strong>{entry.name}</strong>
+                          <span
+                            className={draft.isActive ? "status ok" : "status"}
+                          >
+                            {draft.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                        <span className="meta">
+                          Last seen {formatDateTime(entry.lastSeenAt)}
+                        </span>
+                        <div className="operations-record-grid">
+                          <label className="field">
+                            <span>Name</span>
+                            <input
+                              className="input"
+                              value={draft.name}
+                              onChange={(event) =>
+                                updateKdsDraft(entry.id, {
+                                  name: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Station</span>
+                            <input
+                              className="input"
+                              value={draft.station}
+                              onChange={(event) =>
+                                updateKdsDraft(entry.id, {
+                                  station: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="mini-check operations-active-check">
+                            <input
+                              type="checkbox"
+                              checked={draft.isActive}
+                              onChange={(event) =>
+                                updateKdsDraft(entry.id, {
+                                  isActive: event.target.checked,
+                                })
+                              }
+                            />
+                            <span>Active</span>
+                          </label>
+                        </div>
+                        <label className="field">
+                          <span>Token</span>
+                          <input
+                            className="input mono"
+                            value={draft.token}
+                            onChange={(event) =>
+                              updateKdsDraft(entry.id, {
+                                token: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <button
+                          className="btn primary"
+                          type="button"
+                          disabled={!draft.name.trim() || !draft.token.trim()}
+                          onClick={() => void saveKdsDevice(entry)}
+                        >
+                          Save KDS device
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {operations?.kdsDevices.length === 0 ? (
+                    <span className="meta">No KDS devices yet.</span>
+                  ) : null}
+                </div>
+              </article>
+
+              <article className="card grid">
+                <h2>Audit log</h2>
+                <div className="list compact-list">
+                  {(operations?.auditLogs ?? []).map((entry) => (
+                    <div className="list-item" key={entry.id}>
+                      <strong>{entry.action}</strong>
+                      <span className="meta">
+                        {entry.entityType}
+                        {entry.entityId ? ` ${entry.entityId}` : ""} |{" "}
+                        {formatDateTime(entry.createdAt)}
                       </span>
                     </div>
-                    <span className="meta">
-                      Last seen {formatDateTime(entry.lastSeenAt)}
-                    </span>
-                    <div className="operations-record-grid">
-                      <label className="field">
-                        <span>Name</span>
-                        <input
-                          className="input"
-                          value={draft.name}
-                          onChange={(event) =>
-                            updateKdsDraft(entry.id, {
-                              name: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Station</span>
-                        <input
-                          className="input"
-                          value={draft.station}
-                          onChange={(event) =>
-                            updateKdsDraft(entry.id, {
-                              station: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="mini-check operations-active-check">
-                        <input
-                          type="checkbox"
-                          checked={draft.isActive}
-                          onChange={(event) =>
-                            updateKdsDraft(entry.id, {
-                              isActive: event.target.checked,
-                            })
-                          }
-                        />
-                        <span>Active</span>
-                      </label>
-                    </div>
-                    <label className="field">
-                      <span>Token</span>
-                      <input
-                        className="input mono"
-                        value={draft.token}
-                        onChange={(event) =>
-                          updateKdsDraft(entry.id, {
-                            token: event.target.value,
-                          })
-                        }
-                      />
-                    </label>
-                    <button
-                      className="btn primary"
-                      type="button"
-                      disabled={!draft.name.trim() || !draft.token.trim()}
-                      onClick={() => void saveKdsDevice(entry)}
-                    >
-                      Save KDS device
-                    </button>
-                  </div>
-                );
-              })}
-              {operations?.kdsDevices.length === 0 ? (
-                <span className="meta">No KDS devices yet.</span>
-              ) : null}
-            </div>
-          </article>
-
-          <article className="card grid">
-            <h2>Audit log</h2>
-            <div className="list compact-list">
-              {(operations?.auditLogs ?? []).map((entry) => (
-                <div className="list-item" key={entry.id}>
-                  <strong>{entry.action}</strong>
-                  <span className="meta">
-                    {entry.entityType}
-                    {entry.entityId ? ` ${entry.entityId}` : ""} |{" "}
-                    {formatDateTime(entry.createdAt)}
-                  </span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </article>
+              </article>
+            </>
+          ) : null}
         </section>
       </main>
     </AuthGate>

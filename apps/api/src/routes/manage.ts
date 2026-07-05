@@ -32,6 +32,7 @@ import {
   getManageTables,
   getStoreSettings,
   reprintOrder,
+  getP1SmokeCockpit,
   rotateDiningTableQrToken,
   receivePurchaseOrder,
   updateCustomerFeedbackStatus,
@@ -324,6 +325,14 @@ manageRouter.get("/operations", async (_req, res, next) => {
 manageRouter.get("/p0-smoke", async (_req, res, next) => {
   try {
     res.json(await getP0SmokeCockpit());
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.get("/p1-smoke", async (_req, res, next) => {
+  try {
+    res.json(await getP1SmokeCockpit());
   } catch (error) {
     next(error);
   }

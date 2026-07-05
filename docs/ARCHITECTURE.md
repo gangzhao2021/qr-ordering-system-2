@@ -69,6 +69,8 @@ P1 stocktake adds applied stock counts for tracked menu items. Management can su
 
 P1 recipe costing adds `Ingredient`, `Recipe`, and `RecipeLine` records. Management can maintain ingredient stock quantity, unit, unit cost, low-stock threshold, and active state, then assign one recipe to a menu item. Recipe cost is computed from line quantity times current ingredient unit cost, divided by yield quantity, and the API reports cost, margin cents, and margin basis points for operations review. This foundation does not attempt complex unit conversion, supplier invoice averaging, or automatic ingredient-level stock consumption yet.
 
+The P1 smoke cockpit aggregates store-operations readiness from existing transactional tables rather than storing separate state. It reports supplier, purchase order, stocktake, ingredient, recipe, member, coupon, and feedback coverage, and links managers to the same operational surfaces used during smoke verification.
+
 KDS device records provide token and station inventory for device setup. The current kitchen page is still staff-session based and read-only; device-token heartbeat and station authorization are later-phase hardening.
 
 ## Table Management

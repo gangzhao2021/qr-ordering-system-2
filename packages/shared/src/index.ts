@@ -850,6 +850,34 @@ export type P0SmokeCockpitResponse = {
   }>;
 };
 
+export type P1SmokeCockpitResponse = {
+  store: StoreSummary;
+  generatedAt: string;
+  overallStatus: P0SmokeStatus;
+  summary: {
+    suppliers: number;
+    purchaseOrders: number;
+    stocktakes: number;
+    ingredients: number;
+    recipes: number;
+    members: number;
+    coupons: number;
+    feedback: number;
+    unresolvedFeedback: number;
+  };
+  modules: P0SmokeStage[];
+  commands: Array<{
+    label: string;
+    command: string;
+    coverage: string;
+  }>;
+  routes: Array<{
+    label: string;
+    href: string;
+    role: StaffRole;
+  }>;
+};
+
 export type CreateSupplierRequest = Pick<
   Supplier,
   "name" | "contactName" | "phone" | "email" | "notes"

@@ -14,6 +14,11 @@ const links = [
     body: "End-to-end readiness for QR ordering, FOH, kitchen, printer, and management.",
   },
   {
+    href: "/manage/p1-smoke",
+    title: "P1 smoke cockpit",
+    body: "Pilot readiness for purchasing, inventory, costing, customers, and feedback.",
+  },
+  {
     href: "/manage/settings",
     title: "Store settings",
     body: "Currency, receipt identity, tax, and service charge.",
@@ -46,7 +51,7 @@ const links = [
   {
     href: "/manage/operations",
     title: "Operations",
-    body: "Suppliers, stock movement, coupons, members, KDS devices, and audit logs.",
+    body: "Inventory, costing, customers, feedback, devices, and audit logs.",
   },
   {
     href: "/manage/purchasing",

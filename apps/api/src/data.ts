@@ -51,6 +51,7 @@ import type {
   P0SmokeCockpitResponse,
   P0SmokeCheck,
   P0SmokeStatus,
+  P1SmokeCockpitResponse,
   PrintJob,
   PurchaseOrder,
   RefundPaymentRequest,
@@ -3258,6 +3259,207 @@ export async function getP0SmokeCockpit(): Promise<P0SmokeCockpitResponse> {
       { label: "Print jobs", href: "/manage/print-jobs", role: "ADMIN" },
       { label: "Menu setup", href: "/manage/menu", role: "ADMIN" },
       { label: "Tables and QR", href: "/manage/tables", role: "ADMIN" },
+    ],
+  };
+}
+
+export async function getP1SmokeCockpit(): Promise<P1SmokeCockpitResponse> {
+  const store = await getDefaultStore();
+  const [
+    supplierCount,
+    activeSupplierCount,
+    purchaseOrderCount,
+    receivedPurchaseOrderCount,
+    inventoryAdjustmentCount,
+    stocktakeCount,
+    ingredientCount,
+    recipeCount,
+    memberCount,
+    couponCount,
+    couponRedemptionCount,
+    feedbackCount,
+    unresolvedFeedbackCount,
+    paymentWithMemberCount,
+    kdsDeviceCount,
+  ] = await Promise.all([
+    prisma.supplier.count({ where: { storeId: store.id } }),
+    prisma.supplier.count({ where: { storeId: store.id, isActive: true } }),
+    prisma.purchaseOrder.count({ where: { storeId: store.id } }),
+    prisma.purchaseOrder.count({
+      where: { storeId: store.id, status: "RECEIVED" },
+    }),
+    prisma.inventoryAdjustment.count({ where: { storeId: store.id } }),
+    prisma.stocktake.count({ where: { storeId: store.id } }),
+    prisma.ingredient.count({ where: { storeId: store.id } }),
+    prisma.recipe.count({ where: { storeId: store.id } }),
+    prisma.member.count({ where: { storeId: store.id } }),
+    prisma.coupon.count({ where: { storeId: store.id } }),
+    prisma.couponRedemption.count({ where: { storeId: store.id } }),
+    prisma.feedback.count({ where: { storeId: store.id } }),
+    prisma.feedback.count({
+      where: { storeId: store.id, status: { not: "RESOLVED" } },
+    }),
+    prisma.payment.count({
+      where: { storeId: store.id, memberId: { not: null } },
+    }),
+    prisma.kdsDevice.count({ where: { storeId: store.id } }),
+  ]);
+
+  const checks = {
+    inventoryCosting: [
+      smokeCheck(
+        "p1-suppliers",
+        "Supplier setup",
+        activeSupplierCount > 0 ? "READY" : "NEEDS_SETUP",
+        `${activeSupplierCount}/${supplierCount} suppliers active`,
+        "/manage/operations",
+      ),
+      smokeCheck(
+        "p1-purchasing",
+        "Purchase receiving",
+        receivedPurchaseOrderCount > 0
+          ? "READY"
+          : purchaseOrderCount > 0
+            ? "WATCH"
+            : "NEEDS_SETUP",
+        `${receivedPurchaseOrderCount}/${purchaseOrderCount} purchase orders received`,
+        "/manage/purchasing",
+      ),
+      smokeCheck(
+        "p1-stocktakes",
+        "Applied stocktakes",
+        stocktakeCount > 0 ? "READY" : "WATCH",
+        `${stocktakeCount} stocktakes and ${inventoryAdjustmentCount} inventory movements`,
+        "/manage/operations",
+      ),
+      smokeCheck(
+        "p1-recipes",
+        "Recipe costing",
+        ingredientCount > 0 && recipeCount > 0 ? "READY" : "WATCH",
+        `${ingredientCount} ingredients and ${recipeCount} recipe cost rollups`,
+        "/manage/operations",
+      ),
+    ],
+    customers: [
+      smokeCheck(
+        "p1-members",
+        "Member profiles",
+        memberCount > 0 ? "READY" : "WATCH",
+        `${memberCount} members and ${paymentWithMemberCount} member payments`,
+        "/manage/operations",
+      ),
+      smokeCheck(
+        "p1-coupons",
+        "Coupons and redemptions",
+        couponCount > 0 ? "READY" : "WATCH",
+        `${couponCount} coupons and ${couponRedemptionCount} redemptions`,
+        "/manage/operations",
+      ),
+      smokeCheck(
+        "p1-feedback",
+        "Customer feedback",
+        feedbackCount > 0 ? "READY" : "WATCH",
+        unresolvedFeedbackCount > 0
+          ? `${unresolvedFeedbackCount}/${feedbackCount} feedback items need follow-up`
+          : `${feedbackCount} feedback items, none unresolved`,
+        "/manage/operations",
+      ),
+    ],
+    operations: [
+      smokeCheck(
+        "p1-operations-ia",
+        "Operations workspace",
+        "READY",
+        "Operations is grouped into inventory/costing, customers, and devices/audit",
+        "/manage/operations",
+      ),
+      smokeCheck(
+        "p1-kds-devices",
+        "KDS device inventory",
+        kdsDeviceCount > 0 ? "READY" : "WATCH",
+        `${kdsDeviceCount} configured KDS devices`,
+        "/manage/operations",
+      ),
+      smokeCheck(
+        "p1-docs",
+        "P1 exit checklist",
+        "READY",
+        "docs/P1_EXIT_CRITERIA.md defines the pilot gate",
+        "/manage/p1-smoke",
+      ),
+    ],
+  };
+  const allChecks = Object.values(checks).flat();
+
+  return {
+    store: mapStore(store),
+    generatedAt: new Date().toISOString(),
+    overallStatus: smokeOverall(allChecks),
+    summary: {
+      suppliers: supplierCount,
+      purchaseOrders: purchaseOrderCount,
+      stocktakes: stocktakeCount,
+      ingredients: ingredientCount,
+      recipes: recipeCount,
+      members: memberCount,
+      coupons: couponCount,
+      feedback: feedbackCount,
+      unresolvedFeedback: unresolvedFeedbackCount,
+    },
+    modules: [
+      {
+        id: "inventory-costing",
+        title: "Inventory and costing",
+        checks: checks.inventoryCosting,
+      },
+      {
+        id: "customers",
+        title: "Customers and loyalty",
+        checks: checks.customers,
+      },
+      {
+        id: "operations-controls",
+        title: "Controls and pilot readiness",
+        checks: checks.operations,
+      },
+    ],
+    commands: [
+      {
+        label: "Purchasing",
+        command: "pnpm smoke:p1",
+        coverage: "purchase order receiving and stock movement",
+      },
+      {
+        label: "Members and coupons",
+        command: "pnpm smoke:p1-members",
+        coverage: "member capture, coupon redemption, points, checkout",
+      },
+      {
+        label: "Inventory",
+        command: "pnpm smoke:p1-inventory",
+        coverage: "applied stocktake and linked inventory adjustment",
+      },
+      {
+        label: "Recipe costing",
+        command: "pnpm smoke:p1-recipes",
+        coverage: "ingredient setup, recipe cost, margin reporting",
+      },
+      {
+        label: "Feedback",
+        command: "pnpm smoke:p1-feedback",
+        coverage: "post-checkout feedback and member profile history",
+      },
+      {
+        label: "P0 regression",
+        command: "pnpm smoke:p0",
+        coverage: "customer, FOH, kitchen, printer, checkout core loop",
+      },
+    ],
+    routes: [
+      { label: "Operations", href: "/manage/operations", role: "ADMIN" },
+      { label: "Purchasing", href: "/manage/purchasing", role: "ADMIN" },
+      { label: "Analytics", href: "/manage/analytics", role: "ADMIN" },
+      { label: "P0 cockpit", href: "/manage/p0-smoke", role: "ADMIN" },
     ],
   };
 }

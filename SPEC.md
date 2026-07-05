@@ -50,6 +50,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Manage ingredients, recipe lines, menu item cost, and margin estimates.
 - Review customer feedback and mark feedback reviewed or resolved.
 - Review member order, payment, coupon, and feedback history.
+- Review P1 pilot readiness across purchasing, inventory, costing, customers, and feedback.
 
 ### Printer Service
 

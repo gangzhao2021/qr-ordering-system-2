@@ -1280,6 +1280,43 @@ textarea {
   margin-top: 16px;
 }
 
+.operations-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.operations-tab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.operations-tab.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(43, 101, 95, 0.12);
+}
+
+.operations-tab span,
+.operations-tab strong {
+  font-weight: 800;
+}
+
+.operations-tab small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .operations-edit-list,
 .operations-record-card {
   display: grid;
@@ -1538,6 +1575,7 @@ textarea {
   .menu-item,
   .menu-item-summary,
   .inventory-controls,
+  .operations-tabs,
   .category-editor-controls,
   .menu-item-controls,
   .menu-item-controls.secondary,
