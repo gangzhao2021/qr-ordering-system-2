@@ -586,6 +586,25 @@ export type KitchenPendingResponse = {
   items: KitchenPendingItem[];
 };
 
+export type KdsDeviceSession = {
+  id: string;
+  name: string;
+  station?: string | null;
+  isActive: boolean;
+  lastSeenAt?: string | null;
+};
+
+export type KdsDevicePendingResponse = {
+  store: StoreSummary;
+  device: KdsDeviceSession;
+  items: KitchenPendingItem[];
+};
+
+export type KdsHeartbeatResponse = {
+  store: StoreSummary;
+  device: KdsDeviceSession;
+};
+
 export type ManageMenuResponse = {
   store: StoreSummary;
   categories: MenuCategory[];
@@ -913,6 +932,9 @@ export type P2SmokeCockpitResponse = {
     storesWithManagers: number;
     storesWithTables: number;
     storesWithMenuItems: number;
+    activeKdsDevices: number;
+    onlineKdsDevices: number;
+    kdsStations: number;
   };
   modules: P0SmokeStage[];
   commands: Array<{

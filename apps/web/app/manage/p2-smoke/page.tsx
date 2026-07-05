@@ -122,6 +122,18 @@ export default function P2SmokeCockpitPage() {
             <span className="meta">Menu setup</span>
             <strong>{data?.summary.storesWithMenuItems ?? 0}</strong>
           </article>
+          <article className="card metric-card">
+            <span className="meta">KDS devices</span>
+            <strong>{data?.summary.activeKdsDevices ?? 0}</strong>
+          </article>
+          <article className="card metric-card">
+            <span className="meta">KDS online</span>
+            <strong>{data?.summary.onlineKdsDevices ?? 0}</strong>
+          </article>
+          <article className="card metric-card">
+            <span className="meta">KDS stations</span>
+            <strong>{data?.summary.kdsStations ?? 0}</strong>
+          </article>
         </section>
 
         <section className="grid two smoke-main">

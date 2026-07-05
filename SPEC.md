@@ -34,6 +34,8 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 
 - Read pending kitchen items aggregated by station and item.
 - Show waiting time and urgency.
+- Support token-scoped KDS device boards for configured stations.
+- Update KDS device heartbeat without exposing live order mutation.
 - Do not mutate live order state.
 
 ### Management
@@ -45,6 +47,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Provide QR entry links for customer preview.
 - Review print jobs and trigger reprints.
 - Manage suppliers, inventory adjustments, members, coupons, KDS device tokens, and audit history.
+- Copy KDS device links, rotate device tokens, and review KDS heartbeat status.
 - Review member payment summaries and coupon redemption counts.
 - Apply stocktakes for tracked menu item inventory and review stocktake differences.
 - Manage ingredients, recipe lines, menu item cost, and margin estimates.
@@ -65,7 +68,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Supplier invoice reconciliation and advanced recipe costing.
 - Deeper analytics and reporting.
 - Fleet analytics and deeper multi-store operations.
-- KDS device heartbeat and category routing enforcement.
+- Advanced KDS category routing and station load balancing.
 
 ## Non-Negotiable Role Boundary
 

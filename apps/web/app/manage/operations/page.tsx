@@ -212,6 +212,19 @@ function formatDateTime(value?: string | null) {
   }).format(new Date(value));
 }
 
+function isRecent(value?: string | null) {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return false;
+  return Date.now() - timestamp <= 5 * 60 * 1000;
+}
+
+function kdsDeviceUrl(token: string) {
+  const path = `/kitchen/device?t=${encodeURIComponent(token)}`;
+  if (typeof window === "undefined") return path;
+  return `${window.location.origin}${path}`;
+}
+
 function signed(value: number) {
   return value > 0 ? `+${value}` : String(value);
 }
@@ -937,6 +950,33 @@ export default function ManageOperationsPage() {
         }),
       });
       setNotice("KDS device updated.");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function copyKdsDeviceLink(entry: KdsDevice) {
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(kdsDeviceUrl(entry.token));
+      setNotice("KDS device link copied.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function rotateKdsToken(entry: KdsDevice) {
+    if (!window.confirm(`Rotate token for ${entry.name}?`)) return;
+    setError(null);
+    try {
+      await apiFetch(
+        `/v1/manage/operations/kds-devices/${entry.id}/rotate-token`,
+        {
+          method: "POST",
+        },
+      );
+      setNotice("KDS token rotated.");
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -2645,15 +2685,38 @@ export default function ManageOperationsPage() {
                       <div className="operations-record-card" key={entry.id}>
                         <div className="row between">
                           <strong>{entry.name}</strong>
-                          <span
-                            className={draft.isActive ? "status ok" : "status"}
-                          >
-                            {draft.isActive ? "Active" : "Inactive"}
-                          </span>
+                          <div className="row">
+                            <span
+                              className={
+                                draft.isActive ? "status ok" : "status"
+                              }
+                            >
+                              {draft.isActive ? "Active" : "Inactive"}
+                            </span>
+                            <span
+                              className={
+                                isRecent(entry.lastSeenAt)
+                                  ? "status ok"
+                                  : "status checkout"
+                              }
+                            >
+                              {isRecent(entry.lastSeenAt)
+                                ? "Online"
+                                : "Offline"}
+                            </span>
+                          </div>
                         </div>
                         <span className="meta">
                           Last seen {formatDateTime(entry.lastSeenAt)}
                         </span>
+                        <a
+                          className="link-btn ghost"
+                          href={kdsDeviceUrl(entry.token)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open device board
+                        </a>
                         <div className="operations-record-grid">
                           <label className="field">
                             <span>Name</span>
@@ -2704,14 +2767,30 @@ export default function ManageOperationsPage() {
                             }
                           />
                         </label>
-                        <button
-                          className="btn primary"
-                          type="button"
-                          disabled={!draft.name.trim() || !draft.token.trim()}
-                          onClick={() => void saveKdsDevice(entry)}
-                        >
-                          Save KDS device
-                        </button>
+                        <div className="row">
+                          <button
+                            className="btn primary"
+                            type="button"
+                            disabled={!draft.name.trim() || !draft.token.trim()}
+                            onClick={() => void saveKdsDevice(entry)}
+                          >
+                            Save KDS device
+                          </button>
+                          <button
+                            className="btn ghost"
+                            type="button"
+                            onClick={() => void copyKdsDeviceLink(entry)}
+                          >
+                            Copy link
+                          </button>
+                          <button
+                            className="btn ghost"
+                            type="button"
+                            onClick={() => void rotateKdsToken(entry)}
+                          >
+                            Rotate token
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

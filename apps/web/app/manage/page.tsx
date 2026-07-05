@@ -21,7 +21,7 @@ const links = [
   {
     href: "/manage/p2-smoke",
     title: "P2 smoke cockpit",
-    body: "Platform readiness for multi-store onboarding and tenant isolation.",
+    body: "Platform, tenant isolation, and KDS device readiness.",
   },
   {
     href: "/manage/platform",

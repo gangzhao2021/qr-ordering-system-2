@@ -27,6 +27,7 @@ pnpm dev
 - P1 inventory smoke against a running API: `pnpm smoke:p1-inventory`
 - P1 recipe costing smoke against a running API: `pnpm smoke:p1-recipes`
 - P1 feedback/profile smoke against a running API: `pnpm smoke:p1-feedback`
+- P2 KDS device smoke against a running API: `pnpm smoke:p2-kds`
 - P2 multi-store smoke against a running API: `pnpm smoke:p2-multistore`
 - P0 closeout checklist: `docs/P0_EXIT_CRITERIA.md`
 - P1 closeout checklist: `docs/P1_EXIT_CRITERIA.md`
@@ -77,6 +78,10 @@ non-DEV managers cannot cross stores by sending a different store header.
 The management P2 smoke cockpit at `/manage/p2-smoke` summarizes platform readiness for
 multi-store onboarding and tenant isolation.
 
+`pnpm smoke:p2-kds` expects a running API. It creates real station-scoped KDS devices,
+submits HOT and BAR orders, verifies token heartbeat and station filtering, rejects invalid
+or inactive tokens, rotates a token, and checks the P2 cockpit KDS readiness fields.
+
 `pnpm test` runs package unit tests for shared contracts, API auth/session helpers, and web
 request/component behavior. It does not start the database or browser.
 
@@ -103,6 +108,7 @@ docs          rewrite plan and architecture notes
 - `/c` - customer entry and table-scoped ordering
 - `/foh` - live FOH workspace
 - `/kitchen` - read-only kitchen display
+- `/kitchen/device` - token-scoped KDS device display for a configured station
 - `/manage` - management hub
 - `/manage/p0-smoke` - P0 operating-loop readiness cockpit
 - `/manage/p1-smoke` - P1 pilot readiness cockpit for store operations
@@ -176,6 +182,8 @@ Operations management covers supplier contacts, stock adjustment history, applie
 ingredient stock/cost records, recipe cost and margin rollups, member records with payment/spend
 summaries and recent order/payment/coupon/feedback history, customer feedback review, coupon
 records with minimum subtotals and redemption counts, KDS device tokens, and audit history.
+KDS devices can open token-scoped station boards, send heartbeat updates, and be rotated from
+management operations.
 Purchasing adds P1 purchase orders and receiving: received quantities update menu item stock and
 create linked inventory movement rows. Customer-facing membership now supports optional phone
 capture, coupon redemption at order/checkout, points accrual on paid FOH checkout, and post-checkout

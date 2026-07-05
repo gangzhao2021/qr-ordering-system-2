@@ -35,6 +35,7 @@ import {
   getPlatformOverview,
   getStoreSettings,
   reprintOrder,
+  rotateKdsDeviceToken,
   getP1SmokeCockpit,
   rotateDiningTableQrToken,
   receivePurchaseOrder,
@@ -549,6 +550,20 @@ manageRouter.patch("/operations/kds-devices/:id", async (req, res, next) => {
     next(error);
   }
 });
+
+manageRouter.post(
+  "/operations/kds-devices/:id/rotate-token",
+  async (req, res, next) => {
+    try {
+      const params = z
+        .object({ id: z.string().trim().min(1) })
+        .parse(req.params);
+      res.json(await rotateKdsDeviceToken(params.id));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 manageRouter.get("/staff", async (_req, res, next) => {
   try {

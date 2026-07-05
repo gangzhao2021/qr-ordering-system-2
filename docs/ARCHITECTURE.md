@@ -81,7 +81,9 @@ The P1 smoke cockpit aggregates store-operations readiness from existing transac
 
 The P2 smoke cockpit aggregates platform readiness from existing store, user, table, and menu rows. It reports store count, active manager coverage, table bootstrap coverage, menu setup coverage, and regression commands.
 
-KDS device records provide token and station inventory for device setup. The current kitchen page is still staff-session based and read-only; device-token heartbeat and station authorization are later-phase hardening.
+KDS device records provide token and station inventory for device setup. Staff-session `/kitchen` remains a read-only operations board for managers and kitchen staff. Token-scoped `/v1/kds/*` endpoints let a configured device read only its station's pending items and send heartbeat updates without a staff session. Invalid, inactive, or rotated device tokens cannot read pending work. Management operations can copy device links, rotate tokens, and review `lastSeenAt` as an online/offline signal.
+
+The P2 smoke cockpit includes KDS active device count, online heartbeat count, and station assignment coverage. `pnpm smoke:p2-kds` proves token auth, station filtering, heartbeat, inactive-token rejection, and token rotation.
 
 ## Table Management
 

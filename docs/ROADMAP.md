@@ -33,7 +33,7 @@
 
 - DEV multi-store onboarding
 - Store-scoped staff APIs and DEV store switcher
-- KDS heartbeat, station authorization, and category routing enforcement
+- KDS heartbeat, station authorization, and station-scoped device boards
 - Stripe/Interac/WeChat Pay/Alipay Hosted Checkout and reconciliation
 - Marketing automation and richer customer segmentation
 - Deeper analytics dashboards and operational reporting

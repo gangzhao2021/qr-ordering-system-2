@@ -32,6 +32,8 @@ import type {
   Ingredient,
   KitchenPendingItem,
   KdsDevice,
+  KdsDevicePendingResponse,
+  KdsHeartbeatResponse,
   LanguageCode,
   LocalizedText,
   ManageAnalyticsResponse,
@@ -981,6 +983,22 @@ function mapKdsDevice(device: {
   };
 }
 
+function mapKdsDeviceSession(device: {
+  id: string;
+  name: string;
+  station: string | null;
+  isActive: boolean;
+  lastSeenAt: Date | null;
+}) {
+  return {
+    id: device.id,
+    name: device.name,
+    station: device.station,
+    isActive: device.isActive,
+    lastSeenAt: optionalIso(device.lastSeenAt),
+  };
+}
+
 function mapAuditLog(log: {
   id: string;
   actorEmail: string | null;
@@ -1508,6 +1526,22 @@ async function generateUniqueQrToken(tableNumber: string) {
     500,
     "QR_TOKEN_GENERATION_FAILED",
     "Could not generate a unique table token",
+  );
+}
+
+async function generateUniqueKdsToken() {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const token = `kds_${randomBytes(12).toString("hex")}`;
+    const existing = await prisma.kdsDevice.findUnique({
+      where: { token },
+      select: { id: true },
+    });
+    if (!existing) return token;
+  }
+  throw new HttpError(
+    500,
+    "KDS_TOKEN_GENERATION_FAILED",
+    "Could not generate a unique KDS token",
   );
 }
 
@@ -2463,8 +2497,11 @@ export async function refundPayment(
   });
 }
 
-export async function getKitchenPendingItems() {
-  const store = await getDefaultStore();
+async function getKitchenPendingItemsForStore(
+  store: StoreRecord,
+  station?: string | null,
+) {
+  const stationFilter = station?.trim();
   const pendingItems = await prisma.orderItem.findMany({
     where: {
       status: "PENDING",
@@ -2472,6 +2509,7 @@ export async function getKitchenPendingItems() {
         storeId: store.id,
         status: "SUBMITTED",
       },
+      ...(stationFilter ? { menuItem: { kitchenStation: stationFilter } } : {}),
     },
     include: {
       order: {
@@ -2544,7 +2582,65 @@ export async function getKitchenPendingItems() {
     ),
   }));
 
+  return items;
+}
+
+export async function getKitchenPendingItems() {
+  const store = await getDefaultStore();
+  const items = await getKitchenPendingItemsForStore(store);
   return { store: mapStore(store), items };
+}
+
+async function getActiveKdsDeviceByToken(token: string) {
+  const trimmed = token.trim();
+  if (!trimmed) {
+    throw new HttpError(401, "KDS_UNAUTHORIZED", "KDS token required");
+  }
+
+  const device = await prisma.kdsDevice.findUnique({
+    where: { token: trimmed },
+    include: { store: true },
+  });
+  if (!device || !device.isActive) {
+    throw new HttpError(
+      401,
+      "KDS_UNAUTHORIZED",
+      "Invalid or inactive KDS token",
+    );
+  }
+  return device;
+}
+
+export async function getKdsDevicePendingItems(
+  token: string,
+): Promise<KdsDevicePendingResponse> {
+  const device = await getActiveKdsDeviceByToken(token);
+  const items = await getKitchenPendingItemsForStore(
+    device.store,
+    device.station,
+  );
+
+  return {
+    store: mapStore(device.store),
+    device: mapKdsDeviceSession(device),
+    items,
+  };
+}
+
+export async function heartbeatKdsDevice(
+  token: string,
+): Promise<KdsHeartbeatResponse> {
+  const existing = await getActiveKdsDeviceByToken(token);
+  const device = await prisma.kdsDevice.update({
+    where: { id: existing.id },
+    data: { lastSeenAt: new Date() },
+    include: { store: true },
+  });
+
+  return {
+    store: mapStore(device.store),
+    device: mapKdsDeviceSession(device),
+  };
 }
 
 export async function getManageMenu() {
@@ -3768,6 +3864,30 @@ export async function getP2SmokeCockpit(): Promise<P2SmokeCockpitResponse> {
   const storesWithMenuItems = stores.filter(
     (store) => store.menuItemCount > 0,
   ).length;
+  const storeIds = stores.map((store) => store.id);
+  const onlineSince = new Date(Date.now() - 5 * 60 * 1000);
+  const [activeKdsDevices, onlineKdsDevices, kdsStationRows] =
+    await Promise.all([
+      prisma.kdsDevice.count({
+        where: { storeId: { in: storeIds }, isActive: true },
+      }),
+      prisma.kdsDevice.count({
+        where: {
+          storeId: { in: storeIds },
+          isActive: true,
+          lastSeenAt: { gte: onlineSince },
+        },
+      }),
+      prisma.kdsDevice.findMany({
+        where: { storeId: { in: storeIds }, isActive: true },
+        select: { station: true },
+      }),
+    ]);
+  const kdsStations = new Set(
+    kdsStationRows
+      .map((row) => row.station?.trim())
+      .filter((station): station is string => Boolean(station)),
+  ).size;
   const checks = {
     platform: [
       platformCheck(
@@ -3817,6 +3937,29 @@ export async function getP2SmokeCockpit(): Promise<P2SmokeCockpitResponse> {
         "/manage/menu",
       ),
     ],
+    kds: [
+      platformCheck(
+        "p2-kds-devices",
+        "KDS token devices",
+        activeKdsDevices > 0 ? "READY" : "WATCH",
+        `${activeKdsDevices} active token-scoped KDS devices`,
+        "/manage/operations",
+      ),
+      platformCheck(
+        "p2-kds-heartbeat",
+        "KDS heartbeat",
+        onlineKdsDevices > 0 ? "READY" : "WATCH",
+        `${onlineKdsDevices}/${activeKdsDevices} active KDS devices seen in the last 5 minutes`,
+        "/manage/operations",
+      ),
+      platformCheck(
+        "p2-kds-stations",
+        "Station authorization",
+        kdsStations > 0 ? "READY" : "WATCH",
+        `${kdsStations} station-specific KDS device assignments`,
+        "/manage/operations",
+      ),
+    ],
     regression: [
       platformCheck(
         "p2-p1-regression",
@@ -3846,13 +3989,23 @@ export async function getP2SmokeCockpit(): Promise<P2SmokeCockpitResponse> {
       storesWithManagers,
       storesWithTables,
       storesWithMenuItems,
+      activeKdsDevices,
+      onlineKdsDevices,
+      kdsStations,
     },
     modules: [
       { id: "platform", title: "Platform onboarding", checks: checks.platform },
       { id: "isolation", title: "Store isolation", checks: checks.isolation },
+      { id: "kds", title: "KDS devices", checks: checks.kds },
       { id: "regression", title: "Regression gate", checks: checks.regression },
     ],
     commands: [
+      {
+        label: "KDS device routing",
+        command: "pnpm smoke:p2-kds",
+        coverage:
+          "token auth, heartbeat, inactive rejection, station filtering",
+      },
       {
         label: "Multi-store isolation",
         command: "pnpm smoke:p2-multistore",
@@ -3871,6 +4024,7 @@ export async function getP2SmokeCockpit(): Promise<P2SmokeCockpitResponse> {
     ],
     routes: [
       { label: "Platform", href: "/manage/platform", role: "DEV" },
+      { label: "KDS device", href: "/kitchen/device", role: "KITCHEN" },
       { label: "Store settings", href: "/manage/settings", role: "ADMIN" },
       { label: "Staff", href: "/manage/staff", role: "ADMIN" },
       { label: "P1 cockpit", href: "/manage/p1-smoke", role: "ADMIN" },
@@ -4721,7 +4875,7 @@ export async function createKdsDevice(input: CreateKdsDeviceRequest) {
       storeId: store.id,
       name: input.name.trim(),
       station: input.station?.trim() || null,
-      token: input.token?.trim() || `kds_${randomBytes(12).toString("hex")}`,
+      token: input.token?.trim() || (await generateUniqueKdsToken()),
       isActive: input.isActive,
     },
   });
@@ -4750,6 +4904,25 @@ export async function updateKdsDevice(
         : {}),
       ...(input.token !== undefined && token ? { token } : {}),
       ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+    },
+  });
+  return mapKdsDevice(device);
+}
+
+export async function rotateKdsDeviceToken(deviceId: string) {
+  const store = await getDefaultStore();
+  const existing = await prisma.kdsDevice.findFirst({
+    where: { id: deviceId, storeId: store.id },
+  });
+  if (!existing) {
+    throw new HttpError(404, "KDS_DEVICE_NOT_FOUND", "KDS device not found");
+  }
+
+  const device = await prisma.kdsDevice.update({
+    where: { id: existing.id },
+    data: {
+      token: await generateUniqueKdsToken(),
+      lastSeenAt: null,
     },
   });
   return mapKdsDevice(device);

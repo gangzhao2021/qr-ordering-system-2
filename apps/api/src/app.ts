@@ -5,6 +5,7 @@ import { applyStoreScope, requireRoles } from "./middleware.js";
 import { authRouter } from "./routes/auth.js";
 import { fohRouter } from "./routes/foh.js";
 import { kitchenRouter } from "./routes/kitchen.js";
+import { kdsRouter } from "./routes/kds.js";
 import { manageRouter } from "./routes/manage.js";
 import { printerRouter } from "./routes/printer.js";
 import { publicRouter } from "./routes/public.js";
@@ -26,6 +27,7 @@ export function createApp() {
 
   app.use("/v1/auth", authRouter);
   app.use("/v1/public", publicRouter);
+  app.use("/v1/kds", kdsRouter);
   app.use(
     "/v1/foh",
     requireRoles(["DEV", "ADMIN", "FOH"]),
