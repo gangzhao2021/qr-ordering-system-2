@@ -27,6 +27,7 @@ pnpm dev
 - P1 inventory smoke against a running API: `pnpm smoke:p1-inventory`
 - P1 recipe costing smoke against a running API: `pnpm smoke:p1-recipes`
 - P1 feedback/profile smoke against a running API: `pnpm smoke:p1-feedback`
+- P2 reporting/audit smoke against a running API: `pnpm smoke:p2-reporting`
 - P2 KDS device smoke against a running API: `pnpm smoke:p2-kds`
 - P2 multi-store smoke against a running API: `pnpm smoke:p2-multistore`
 - P0 closeout checklist: `docs/P0_EXIT_CRITERIA.md`
@@ -76,7 +77,12 @@ preset, first ADMIN, and opening tables, verifies DEV can switch store context, 
 non-DEV managers cannot cross stores by sending a different store header.
 
 The management P2 smoke cockpit at `/manage/p2-smoke` summarizes platform readiness for
-multi-store onboarding and tenant isolation.
+multi-store onboarding, tenant isolation, KDS devices, reporting, and audit traceability.
+
+`pnpm smoke:p2-reporting` expects a running API. It creates a real member/coupon order,
+records payment, refund, inventory movement, and audit entries, verifies operating reports
+and audit filters, creates a separate DEV-selected store, and confirms non-DEV managers cannot
+cross stores through reporting APIs.
 
 `pnpm smoke:p2-kds` expects a running API. It creates real station-scoped KDS devices,
 submits HOT and BAR orders, verifies token heartbeat and station filtering, rejects invalid
@@ -119,7 +125,8 @@ docs          rewrite plan and architecture notes
 - `/manage/tables` - table CRUD, QR token rotation, and printable table cards
 - `/manage/staff` - staff accounts, roles, active access, and password resets
 - `/manage/print-jobs` - kitchen ticket queue review and order reprints
-- `/manage/analytics` - revenue, payments, orders, and top items
+- `/manage/analytics` - operating reports for revenue, refunds, menu performance, customers, inventory risk, and audit signals
+- `/manage/audit` - filterable audit log for management, platform, inventory, checkout, KDS, and feedback changes
 - `/manage/operations` - suppliers, inventory adjustments, stocktakes, ingredients, recipes, feedback, members, coupons, KDS devices, and audit logs
 - `/manage/purchasing` - purchase orders, receiving, and stock movement tied to suppliers
 - `apps/printer` - demo poller for `/v1/printer/jobs`
@@ -147,8 +154,11 @@ or other payment method plus optional reference, tip, manual discount, member ph
 coupon discount, points earned, and refund records. External gateway capture/reconciliation is
 still a future integration; current payment flows are local operating records.
 
-Management analytics uses existing payments, orders, and order items to show a 7/14/31 day
-operating readout: revenue, payment mix, order counts, daily revenue, and top items.
+Management analytics uses existing payments, orders, order items, coupon redemptions, feedback,
+inventory, recipes, and audit logs to show a 7/14/31 day operating readout. It includes net and
+gross revenue, refunds, discounts, tax/service totals, payment mix, order counts, daily revenue,
+category sales, kitchen station performance, top items, member/coupon activity, low-stock menu
+items with recipe margin, and audit action summaries.
 
 Staff management supports creating staff users, changing roles, deactivating access, and
 resetting passwords. Role, active-state, and password changes invalidate existing sessions.
@@ -184,6 +194,9 @@ summaries and recent order/payment/coupon/feedback history, customer feedback re
 records with minimum subtotals and redemption counts, KDS device tokens, and audit history.
 KDS devices can open token-scoped station boards, send heartbeat updates, and be rotated from
 management operations.
+Audit history is also available as a dedicated management page with range, action, entity, and
+actor filters. The reporting APIs honor the same store scope as other staff APIs: DEV can inspect
+a selected store, while ADMIN/FOH/KITCHEN/PRINTER remain locked to their assigned store.
 Purchasing adds P1 purchase orders and receiving: received quantities update menu item stock and
 create linked inventory movement rows. Customer-facing membership now supports optional phone
 capture, coupon redemption at order/checkout, points accrual on paid FOH checkout, and post-checkout

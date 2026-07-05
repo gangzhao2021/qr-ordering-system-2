@@ -613,19 +613,62 @@ export type ManageMenuResponse = {
 export type AnalyticsDailyRevenue = {
   date: string;
   revenueCents: number;
+  netRevenueCents: number;
+  refundedCents: number;
   paymentCount: number;
+  orderCount: number;
 };
 
 export type AnalyticsPaymentMethod = {
   method: PaymentMethod;
   amountCents: number;
+  netRevenueCents: number;
+  refundedCents: number;
   paymentCount: number;
 };
 
 export type AnalyticsTopItem = {
   name: string;
+  categoryName: string;
+  kitchenStation: string;
   quantity: number;
   salesCents: number;
+};
+
+export type AnalyticsCategorySales = {
+  categoryName: string;
+  quantity: number;
+  salesCents: number;
+  itemCount: number;
+};
+
+export type AnalyticsKitchenStation = {
+  station: string;
+  quantity: number;
+  salesCents: number;
+  pendingQuantity: number;
+};
+
+export type AnalyticsCouponPerformance = {
+  code: string;
+  redemptionCount: number;
+  discountCents: number;
+  subtotalCents: number;
+};
+
+export type AnalyticsInventoryRisk = {
+  menuItemId: string;
+  name: string;
+  stockQuantity: number;
+  lowStockThreshold: number;
+  recipeCostCents?: number | null;
+  marginCents?: number | null;
+  marginBps?: number | null;
+};
+
+export type AnalyticsAuditAction = {
+  action: string;
+  count: number;
 };
 
 export type ManageAnalyticsResponse = {
@@ -637,15 +680,39 @@ export type ManageAnalyticsResponse = {
   };
   totals: {
     revenueCents: number;
+    netRevenueCents: number;
+    refundedCents: number;
+    subtotalCents: number;
+    taxCents: number;
+    serviceChargeCents: number;
+    tipCents: number;
+    manualDiscountCents: number;
+    couponDiscountCents: number;
+    discountCents: number;
     paymentCount: number;
     averagePaymentCents: number;
+    averageOrderCents: number;
     submittedOrderCount: number;
     closedOrderCount: number;
     openOrderCount: number;
+    memberPaymentCount: number;
+    memberRevenueCents: number;
+    couponRedemptionCount: number;
+    feedbackCount: number;
+    averageRating: number | null;
+    lowStockItemCount: number;
+    auditLogCount: number;
+    auditActorCount: number;
+    lastAuditAt?: string | null;
   };
   dailyRevenue: AnalyticsDailyRevenue[];
   paymentMethods: AnalyticsPaymentMethod[];
   topItems: AnalyticsTopItem[];
+  categorySales: AnalyticsCategorySales[];
+  kitchenStations: AnalyticsKitchenStation[];
+  coupons: AnalyticsCouponPerformance[];
+  inventoryRisks: AnalyticsInventoryRisk[];
+  auditActions: AnalyticsAuditAction[];
 };
 
 export type Supplier = {
@@ -803,7 +870,38 @@ export type AuditLog = {
   action: string;
   entityType: string;
   entityId?: string | null;
+  metadata?: Record<string, unknown>;
   createdAt: string;
+};
+
+export type AuditLogSummaryRow = {
+  value: string;
+  count: number;
+};
+
+export type ManageAuditLogsResponse = {
+  store: StoreSummary;
+  range: {
+    start: string;
+    end: string;
+    days: number;
+  };
+  filters: {
+    action?: string | null;
+    entityType?: string | null;
+    actorEmail?: string | null;
+    limit: number;
+  };
+  summary: {
+    auditLogCount: number;
+    actorCount: number;
+    entityTypeCount: number;
+    lastAuditAt?: string | null;
+  };
+  actions: AuditLogSummaryRow[];
+  entityTypes: AuditLogSummaryRow[];
+  actors: AuditLogSummaryRow[];
+  logs: AuditLog[];
 };
 
 export type PurchaseOrderLine = {
@@ -935,6 +1033,10 @@ export type P2SmokeCockpitResponse = {
     activeKdsDevices: number;
     onlineKdsDevices: number;
     kdsStations: number;
+    reportingPayments: number;
+    reportingRevenueCents: number;
+    reportingAuditLogs: number;
+    reportingLowStockItems: number;
   };
   modules: P0SmokeStage[];
   commands: Array<{

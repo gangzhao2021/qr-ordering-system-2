@@ -2801,7 +2801,12 @@ export default function ManageOperationsPage() {
               </article>
 
               <article className="card grid">
-                <h2>Audit log</h2>
+                <div className="row between">
+                  <h2>Audit log</h2>
+                  <a className="link-btn ghost" href="/manage/audit">
+                    Open audit
+                  </a>
+                </div>
                 <div className="list compact-list">
                   {(operations?.auditLogs ?? []).map((entry) => (
                     <div className="list-item" key={entry.id}>

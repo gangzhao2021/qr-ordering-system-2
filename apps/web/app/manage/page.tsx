@@ -55,8 +55,13 @@ const links = [
   },
   {
     href: "/manage/analytics",
-    title: "Analytics",
-    body: "Revenue, payments, orders, and top items.",
+    title: "Operating reports",
+    body: "Revenue, refunds, menu performance, customers, inventory risk, and audit signals.",
+  },
+  {
+    href: "/manage/audit",
+    title: "Audit log",
+    body: "Trace management, platform, inventory, checkout, KDS, and feedback changes.",
   },
   {
     href: "/manage/operations",

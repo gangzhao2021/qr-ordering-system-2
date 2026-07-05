@@ -24,6 +24,7 @@ import {
   deleteDiningTable,
   deleteMenuItem,
   createPlatformStore,
+  getManageAuditLogs,
   getManageAnalytics,
   getManageOperations,
   getManageMenu,
@@ -325,6 +326,23 @@ manageRouter.get("/analytics", async (req, res, next) => {
       })
       .parse(req.query);
     res.json(await getManageAnalytics(query.days));
+  } catch (error) {
+    next(error);
+  }
+});
+
+manageRouter.get("/audit-logs", async (req, res, next) => {
+  try {
+    const query = z
+      .object({
+        days: z.coerce.number().int().min(1).max(31).optional(),
+        action: z.string().trim().max(120).optional(),
+        entityType: z.string().trim().max(120).optional(),
+        actorEmail: z.string().trim().max(200).optional(),
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+      })
+      .parse(req.query);
+    res.json(await getManageAuditLogs(query));
   } catch (error) {
     next(error);
   }

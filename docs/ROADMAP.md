@@ -34,10 +34,10 @@
 - DEV multi-store onboarding
 - Store-scoped staff APIs and DEV store switcher
 - KDS heartbeat, station authorization, and station-scoped device boards
+- Store-scoped operating reports for revenue, refunds, menu performance, customers, inventory risk, and audit signals
+- Filterable audit history for management, platform, inventory, checkout, KDS, and feedback changes
 - Stripe/Interac/WeChat Pay/Alipay Hosted Checkout and reconciliation
 - Marketing automation and richer customer segmentation
-- Deeper analytics dashboards and operational reporting
-- Advanced audit history and operational reporting
 
 ## Build Rule
 

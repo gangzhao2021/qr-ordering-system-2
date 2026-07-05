@@ -37,6 +37,7 @@ import type {
   LanguageCode,
   LocalizedText,
   ManageAnalyticsResponse,
+  ManageAuditLogsResponse,
   ManageOperationsResponse,
   ManageStaffUser,
   Member,
@@ -1005,6 +1006,7 @@ function mapAuditLog(log: {
   action: string;
   entityType: string;
   entityId: string | null;
+  metadata?: unknown;
   createdAt: Date;
 }): AuditLog {
   return {
@@ -1013,6 +1015,7 @@ function mapAuditLog(log: {
     action: log.action,
     entityType: log.entityType,
     entityId: log.entityId,
+    metadata: jsonObject(log.metadata),
     createdAt: toIso(log.createdAt),
   };
 }
@@ -2755,14 +2758,33 @@ export async function getManageAnalytics(
   start.setUTCDate(start.getUTCDate() - clampedDays + 1);
   start.setUTCHours(0, 0, 0, 0);
 
-  const [payments, orders, orderItems] = await Promise.all([
+  const auditWhere: Prisma.AuditLogWhereInput = {
+    storeId: store.id,
+    createdAt: { gte: start, lte: end },
+  };
+
+  const [
+    payments,
+    orders,
+    orderItems,
+    couponRedemptions,
+    feedbackRows,
+    stockItems,
+    auditLogCount,
+    auditActionRows,
+    auditActorRows,
+    recentAuditLogs,
+  ] = await Promise.all([
     prisma.payment.findMany({
       where: { storeId: store.id, paidAt: { gte: start, lte: end } },
       orderBy: { paidAt: "asc" },
     }),
     prisma.order.findMany({
       where: { storeId: store.id, submittedAt: { gte: start, lte: end } },
-      select: { status: true },
+      orderBy: { submittedAt: "asc" },
+      include: {
+        items: { orderBy: { createdAt: "asc" } },
+      },
     }),
     prisma.orderItem.findMany({
       where: {
@@ -2775,60 +2797,300 @@ export async function getManageAnalytics(
       select: {
         nameSnapshot: true,
         priceCentsSnapshot: true,
+        modifierTotalCentsSnapshot: true,
         quantity: true,
+        status: true,
+        menuItem: {
+          select: {
+            kitchenStation: true,
+            category: { select: { name: true } },
+          },
+        },
       },
+    }),
+    prisma.couponRedemption.findMany({
+      where: { storeId: store.id, redeemedAt: { gte: start, lte: end } },
+      orderBy: { redeemedAt: "asc" },
+    }),
+    prisma.feedback.findMany({
+      where: { storeId: store.id, createdAt: { gte: start, lte: end } },
+      orderBy: { createdAt: "asc" },
+      select: { rating: true, status: true },
+    }),
+    prisma.menuItem.findMany({
+      where: { storeId: store.id, stockQuantity: { not: null } },
+      orderBy: { name: "asc" },
+      include: {
+        recipe: {
+          include: {
+            lines: {
+              include: {
+                ingredient: { select: { unitCostCents: true } },
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.auditLog.count({ where: auditWhere }),
+    prisma.auditLog.groupBy({
+      by: ["action"],
+      where: auditWhere,
+      _count: { _all: true },
+    }),
+    prisma.auditLog.groupBy({
+      by: ["actorEmail"],
+      where: { ...auditWhere, actorEmail: { not: null } },
+      _count: { _all: true },
+    }),
+    prisma.auditLog.findMany({
+      where: auditWhere,
+      orderBy: { createdAt: "desc" },
+      take: 5,
     }),
   ]);
 
   const daily = new Map<
     string,
-    { revenueCents: number; paymentCount: number }
+    {
+      revenueCents: number;
+      netRevenueCents: number;
+      refundedCents: number;
+      paymentCount: number;
+      orderCount: number;
+    }
   >();
   for (let index = 0; index < clampedDays; index += 1) {
     const day = new Date(start);
     day.setUTCDate(start.getUTCDate() + index);
     daily.set(day.toISOString().slice(0, 10), {
       revenueCents: 0,
+      netRevenueCents: 0,
+      refundedCents: 0,
       paymentCount: 0,
+      orderCount: 0,
     });
   }
 
   const methodMap = new Map<
     Payment["method"],
-    { amountCents: number; paymentCount: number }
+    {
+      amountCents: number;
+      netRevenueCents: number;
+      refundedCents: number;
+      paymentCount: number;
+    }
   >();
   for (const payment of payments) {
     const date = payment.paidAt.toISOString().slice(0, 10);
-    const dailyRow = daily.get(date) ?? { revenueCents: 0, paymentCount: 0 };
+    const dailyRow = daily.get(date) ?? {
+      revenueCents: 0,
+      netRevenueCents: 0,
+      refundedCents: 0,
+      paymentCount: 0,
+      orderCount: 0,
+    };
     dailyRow.revenueCents += payment.amountCents;
+    dailyRow.refundedCents += payment.refundedCents;
+    dailyRow.netRevenueCents += payment.amountCents - payment.refundedCents;
     dailyRow.paymentCount += 1;
     daily.set(date, dailyRow);
 
     const methodRow = methodMap.get(payment.method) ?? {
       amountCents: 0,
+      netRevenueCents: 0,
+      refundedCents: 0,
       paymentCount: 0,
     };
     methodRow.amountCents += payment.amountCents;
+    methodRow.refundedCents += payment.refundedCents;
+    methodRow.netRevenueCents += payment.amountCents - payment.refundedCents;
     methodRow.paymentCount += 1;
     methodMap.set(payment.method, methodRow);
   }
 
-  const itemMap = new Map<string, { quantity: number; salesCents: number }>();
+  for (const order of orders) {
+    const date = order.submittedAt.toISOString().slice(0, 10);
+    const dailyRow = daily.get(date) ?? {
+      revenueCents: 0,
+      netRevenueCents: 0,
+      refundedCents: 0,
+      paymentCount: 0,
+      orderCount: 0,
+    };
+    dailyRow.orderCount += 1;
+    daily.set(date, dailyRow);
+  }
+
+  const itemMap = new Map<
+    string,
+    {
+      categoryName: string;
+      kitchenStation: string;
+      quantity: number;
+      salesCents: number;
+    }
+  >();
+  const categoryMap = new Map<
+    string,
+    { quantity: number; salesCents: number; itemNames: Set<string> }
+  >();
+  const stationMap = new Map<
+    string,
+    { quantity: number; salesCents: number; pendingQuantity: number }
+  >();
   for (const item of orderItems) {
+    const salesCents =
+      (item.priceCentsSnapshot + item.modifierTotalCentsSnapshot) *
+      item.quantity;
+    const categoryName = item.menuItem.category.name;
+    const station = item.menuItem.kitchenStation;
     const existing = itemMap.get(item.nameSnapshot) ?? {
+      categoryName,
+      kitchenStation: station,
       quantity: 0,
       salesCents: 0,
     };
     existing.quantity += item.quantity;
-    existing.salesCents += item.priceCentsSnapshot * item.quantity;
+    existing.salesCents += salesCents;
     itemMap.set(item.nameSnapshot, existing);
+
+    const category = categoryMap.get(categoryName) ?? {
+      quantity: 0,
+      salesCents: 0,
+      itemNames: new Set<string>(),
+    };
+    category.quantity += item.quantity;
+    category.salesCents += salesCents;
+    category.itemNames.add(item.nameSnapshot);
+    categoryMap.set(categoryName, category);
+
+    const stationRow = stationMap.get(station) ?? {
+      quantity: 0,
+      salesCents: 0,
+      pendingQuantity: 0,
+    };
+    stationRow.quantity += item.quantity;
+    stationRow.salesCents += salesCents;
+    if (item.status === "PENDING") {
+      stationRow.pendingQuantity += item.quantity;
+    }
+    stationMap.set(station, stationRow);
   }
 
   const revenueCents = payments.reduce(
     (sum, payment) => sum + payment.amountCents,
     0,
   );
+  const refundedCents = payments.reduce(
+    (sum, payment) => sum + payment.refundedCents,
+    0,
+  );
+  const tipCents = payments.reduce((sum, payment) => sum + payment.tipCents, 0);
+  const manualDiscountCents = payments.reduce(
+    (sum, payment) => sum + payment.manualDiscountCents,
+    0,
+  );
+  const couponDiscountCents = payments.reduce(
+    (sum, payment) => sum + payment.couponDiscountCents,
+    0,
+  );
   const paymentCount = payments.length;
+  const orderTotals = orders.map((order) =>
+    calculateTotals(
+      order.items,
+      store,
+      order.couponDiscountCents,
+      order.couponDiscountLabel ?? order.couponCodeSnapshot,
+    ),
+  );
+  const subtotalCents = orderTotals.reduce(
+    (sum, totals) => sum + totals.subtotalCents,
+    0,
+  );
+  const serviceChargeCents = orderTotals.reduce(
+    (sum, totals) => sum + totals.serviceChargeCents,
+    0,
+  );
+  const taxCents = orderTotals.reduce(
+    (sum, totals) => sum + totals.taxCents,
+    0,
+  );
+  const orderDiscountCents = orderTotals.reduce(
+    (sum, totals) => sum + totals.discountCents,
+    0,
+  );
+  const memberPayments = payments.filter((payment) => payment.memberId);
+  const memberRevenueCents = memberPayments.reduce(
+    (sum, payment) => sum + payment.amountCents - payment.refundedCents,
+    0,
+  );
+
+  const couponMap = new Map<
+    string,
+    { redemptionCount: number; discountCents: number; subtotalCents: number }
+  >();
+  for (const redemption of couponRedemptions) {
+    const row = couponMap.get(redemption.codeSnapshot) ?? {
+      redemptionCount: 0,
+      discountCents: 0,
+      subtotalCents: 0,
+    };
+    row.redemptionCount += 1;
+    row.discountCents += redemption.discountCents;
+    row.subtotalCents += redemption.subtotalCents;
+    couponMap.set(redemption.codeSnapshot, row);
+  }
+
+  const averageRating =
+    feedbackRows.length > 0
+      ? Math.round(
+          (feedbackRows.reduce((sum, feedback) => sum + feedback.rating, 0) /
+            feedbackRows.length) *
+            10,
+        ) / 10
+      : null;
+
+  const inventoryRisks = stockItems
+    .filter(
+      (item) =>
+        item.stockQuantity !== null &&
+        item.lowStockThreshold > 0 &&
+        item.stockQuantity <= item.lowStockThreshold,
+    )
+    .map((item) => {
+      const recipe = item.recipe;
+      const recipeCostCents = recipe
+        ? Math.round(
+            recipe.lines.reduce(
+              (sum, line) =>
+                sum + line.quantity * line.ingredient.unitCostCents,
+              0,
+            ) / Math.max(recipe.yieldQuantity, 1),
+          )
+        : null;
+      const marginCents =
+        recipeCostCents === null ? null : item.priceCents - recipeCostCents;
+      return {
+        menuItemId: item.id,
+        name: item.name,
+        stockQuantity: item.stockQuantity ?? 0,
+        lowStockThreshold: item.lowStockThreshold,
+        recipeCostCents,
+        marginCents,
+        marginBps:
+          marginCents === null || item.priceCents <= 0
+            ? null
+            : Math.round((marginCents / item.priceCents) * 10000),
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.stockQuantity - b.stockQuantity ||
+        a.lowStockThreshold - b.lowStockThreshold ||
+        a.name.localeCompare(b.name),
+    )
+    .slice(0, 12);
 
   return {
     store: mapStore(store),
@@ -2839,19 +3101,48 @@ export async function getManageAnalytics(
     },
     totals: {
       revenueCents,
+      netRevenueCents: revenueCents - refundedCents,
+      refundedCents,
+      subtotalCents,
+      taxCents,
+      serviceChargeCents,
+      tipCents,
+      manualDiscountCents,
+      couponDiscountCents,
+      discountCents:
+        manualDiscountCents + Math.max(couponDiscountCents, orderDiscountCents),
       paymentCount,
       averagePaymentCents:
         paymentCount > 0 ? Math.round(revenueCents / paymentCount) : 0,
+      averageOrderCents:
+        orders.length > 0
+          ? Math.round(
+              orderTotals.reduce((sum, totals) => sum + totals.totalCents, 0) /
+                orders.length,
+            )
+          : 0,
       submittedOrderCount: orders.length,
       closedOrderCount: orders.filter((order) => order.status === "CLOSED")
         .length,
       openOrderCount: orders.filter((order) => order.status === "SUBMITTED")
         .length,
+      memberPaymentCount: memberPayments.length,
+      memberRevenueCents,
+      couponRedemptionCount: couponRedemptions.length,
+      feedbackCount: feedbackRows.length,
+      averageRating,
+      lowStockItemCount: inventoryRisks.length,
+      auditLogCount,
+      auditActorCount: auditActorRows.length,
+      lastAuditAt: optionalIso(recentAuditLogs[0]?.createdAt),
     },
     dailyRevenue: Array.from(daily.entries()).map(([date, row]) => ({
       date,
       revenueCents: row.revenueCents,
+      netRevenueCents: row.netRevenueCents,
+      refundedCents: row.refundedCents,
       paymentCount: row.paymentCount,
+      orderCount: row.orderCount,
     })),
     paymentMethods: Array.from(methodMap.entries())
       .map(([method, row]) => ({ method, ...row }))
@@ -2860,6 +3151,127 @@ export async function getManageAnalytics(
       .map(([name, row]) => ({ name, ...row }))
       .sort((a, b) => b.quantity - a.quantity || b.salesCents - a.salesCents)
       .slice(0, 10),
+    categorySales: Array.from(categoryMap.entries())
+      .map(([categoryName, row]) => ({
+        categoryName,
+        quantity: row.quantity,
+        salesCents: row.salesCents,
+        itemCount: row.itemNames.size,
+      }))
+      .sort((a, b) => b.salesCents - a.salesCents || b.quantity - a.quantity),
+    kitchenStations: Array.from(stationMap.entries())
+      .map(([station, row]) => ({ station, ...row }))
+      .sort(
+        (a, b) =>
+          b.salesCents - a.salesCents || a.station.localeCompare(b.station),
+      ),
+    coupons: Array.from(couponMap.entries())
+      .map(([code, row]) => ({ code, ...row }))
+      .sort((a, b) => b.discountCents - a.discountCents)
+      .slice(0, 10),
+    inventoryRisks,
+    auditActions: auditActionRows
+      .map((row) => ({ action: row.action, count: row._count._all }))
+      .sort((a, b) => b.count - a.count || a.action.localeCompare(b.action))
+      .slice(0, 10),
+  };
+}
+
+export async function getManageAuditLogs(input?: {
+  days?: number;
+  action?: string | null;
+  entityType?: string | null;
+  actorEmail?: string | null;
+  limit?: number;
+}): Promise<ManageAuditLogsResponse> {
+  const clampedDays = Math.min(Math.max(input?.days ?? 7, 1), 31);
+  const limit = Math.min(Math.max(input?.limit ?? 100, 1), 200);
+  const action = input?.action?.trim() || null;
+  const entityType = input?.entityType?.trim() || null;
+  const actorEmail = input?.actorEmail?.trim() || null;
+  const store = await getDefaultStore();
+  const end = new Date();
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - clampedDays + 1);
+  start.setUTCHours(0, 0, 0, 0);
+
+  const where: Prisma.AuditLogWhereInput = {
+    storeId: store.id,
+    createdAt: { gte: start, lte: end },
+    ...(action ? { action: { contains: action, mode: "insensitive" } } : {}),
+    ...(entityType
+      ? { entityType: { contains: entityType, mode: "insensitive" } }
+      : {}),
+    ...(actorEmail
+      ? { actorEmail: { contains: actorEmail, mode: "insensitive" } }
+      : {}),
+  };
+  const baseWhere: Prisma.AuditLogWhereInput = {
+    storeId: store.id,
+    createdAt: { gte: start, lte: end },
+  };
+
+  const [logs, auditLogCount, actionRows, entityRows, actorRows, recentLog] =
+    await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      }),
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.groupBy({
+        by: ["action"],
+        where: baseWhere,
+        _count: { _all: true },
+      }),
+      prisma.auditLog.groupBy({
+        by: ["entityType"],
+        where: baseWhere,
+        _count: { _all: true },
+      }),
+      prisma.auditLog.groupBy({
+        by: ["actorEmail"],
+        where: { ...baseWhere, actorEmail: { not: null } },
+        _count: { _all: true },
+      }),
+      prisma.auditLog.findFirst({
+        where,
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+  return {
+    store: mapStore(store),
+    range: {
+      start: start.toISOString(),
+      end: end.toISOString(),
+      days: clampedDays,
+    },
+    filters: {
+      action,
+      entityType,
+      actorEmail,
+      limit,
+    },
+    summary: {
+      auditLogCount,
+      actorCount: actorRows.length,
+      entityTypeCount: entityRows.length,
+      lastAuditAt: optionalIso(recentLog?.createdAt),
+    },
+    actions: actionRows
+      .map((row) => ({ value: row.action, count: row._count._all }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
+    entityTypes: entityRows
+      .map((row) => ({ value: row.entityType, count: row._count._all }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
+    actors: actorRows
+      .map((row) => ({
+        value: row.actorEmail ?? "unknown",
+        count: row._count._all,
+      }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
+    logs: logs.map(mapAuditLog),
   };
 }
 
@@ -3866,28 +4278,69 @@ export async function getP2SmokeCockpit(): Promise<P2SmokeCockpitResponse> {
   ).length;
   const storeIds = stores.map((store) => store.id);
   const onlineSince = new Date(Date.now() - 5 * 60 * 1000);
-  const [activeKdsDevices, onlineKdsDevices, kdsStationRows] =
-    await Promise.all([
-      prisma.kdsDevice.count({
-        where: { storeId: { in: storeIds }, isActive: true },
-      }),
-      prisma.kdsDevice.count({
-        where: {
-          storeId: { in: storeIds },
-          isActive: true,
-          lastSeenAt: { gte: onlineSince },
-        },
-      }),
-      prisma.kdsDevice.findMany({
-        where: { storeId: { in: storeIds }, isActive: true },
-        select: { station: true },
-      }),
-    ]);
+  const reportingSince = new Date();
+  reportingSince.setUTCDate(reportingSince.getUTCDate() - 30);
+  const [
+    activeKdsDevices,
+    onlineKdsDevices,
+    kdsStationRows,
+    reportingPayments,
+    reportingAuditLogs,
+    reportingStockItems,
+  ] = await Promise.all([
+    prisma.kdsDevice.count({
+      where: { storeId: { in: storeIds }, isActive: true },
+    }),
+    prisma.kdsDevice.count({
+      where: {
+        storeId: { in: storeIds },
+        isActive: true,
+        lastSeenAt: { gte: onlineSince },
+      },
+    }),
+    prisma.kdsDevice.findMany({
+      where: { storeId: { in: storeIds }, isActive: true },
+      select: { station: true },
+    }),
+    prisma.payment.findMany({
+      where: {
+        storeId: overview.currentStore.id,
+        paidAt: { gte: reportingSince },
+      },
+      select: { amountCents: true, refundedCents: true },
+    }),
+    prisma.auditLog.count({
+      where: {
+        storeId: overview.currentStore.id,
+        createdAt: { gte: reportingSince },
+      },
+    }),
+    prisma.menuItem.findMany({
+      where: {
+        storeId: overview.currentStore.id,
+        stockQuantity: { not: null },
+      },
+      select: {
+        stockQuantity: true,
+        lowStockThreshold: true,
+      },
+    }),
+  ]);
   const kdsStations = new Set(
     kdsStationRows
       .map((row) => row.station?.trim())
       .filter((station): station is string => Boolean(station)),
   ).size;
+  const reportingRevenueCents = reportingPayments.reduce(
+    (sum, payment) => sum + payment.amountCents - payment.refundedCents,
+    0,
+  );
+  const reportingLowStockItems = reportingStockItems.filter(
+    (item) =>
+      item.stockQuantity !== null &&
+      item.lowStockThreshold > 0 &&
+      item.stockQuantity <= item.lowStockThreshold,
+  ).length;
   const checks = {
     platform: [
       platformCheck(
@@ -3960,6 +4413,36 @@ export async function getP2SmokeCockpit(): Promise<P2SmokeCockpitResponse> {
         "/manage/operations",
       ),
     ],
+    reporting: [
+      platformCheck(
+        "p2-reporting-payments",
+        "Operating report data",
+        reportingPayments.length > 0 ? "READY" : "WATCH",
+        `${reportingPayments.length} payments in the last 31 days`,
+        "/manage/analytics",
+      ),
+      platformCheck(
+        "p2-reporting-revenue",
+        "Revenue and refunds",
+        reportingRevenueCents > 0 ? "READY" : "WATCH",
+        `${reportingRevenueCents} net cents available for reporting`,
+        "/manage/analytics",
+      ),
+      platformCheck(
+        "p2-reporting-audit",
+        "Audit traceability",
+        reportingAuditLogs > 0 ? "READY" : "WATCH",
+        `${reportingAuditLogs} audit entries in the last 31 days`,
+        "/manage/audit",
+      ),
+      platformCheck(
+        "p2-reporting-inventory-risk",
+        "Inventory risk monitor",
+        reportingStockItems.length > 0 ? "READY" : "WATCH",
+        `${reportingLowStockItems}/${reportingStockItems.length} tracked menu items are low stock`,
+        "/manage/analytics",
+      ),
+    ],
     regression: [
       platformCheck(
         "p2-p1-regression",
@@ -3992,14 +4475,29 @@ export async function getP2SmokeCockpit(): Promise<P2SmokeCockpitResponse> {
       activeKdsDevices,
       onlineKdsDevices,
       kdsStations,
+      reportingPayments: reportingPayments.length,
+      reportingRevenueCents,
+      reportingAuditLogs,
+      reportingLowStockItems,
     },
     modules: [
       { id: "platform", title: "Platform onboarding", checks: checks.platform },
       { id: "isolation", title: "Store isolation", checks: checks.isolation },
       { id: "kds", title: "KDS devices", checks: checks.kds },
+      {
+        id: "reporting",
+        title: "Reporting and audit",
+        checks: checks.reporting,
+      },
       { id: "regression", title: "Regression gate", checks: checks.regression },
     ],
     commands: [
+      {
+        label: "Reporting and audit",
+        command: "pnpm smoke:p2-reporting",
+        coverage:
+          "analytics totals, audit filters, inventory risk, store isolation",
+      },
       {
         label: "KDS device routing",
         command: "pnpm smoke:p2-kds",
@@ -4024,6 +4522,8 @@ export async function getP2SmokeCockpit(): Promise<P2SmokeCockpitResponse> {
     ],
     routes: [
       { label: "Platform", href: "/manage/platform", role: "DEV" },
+      { label: "Analytics", href: "/manage/analytics", role: "ADMIN" },
+      { label: "Audit", href: "/manage/audit", role: "ADMIN" },
       { label: "KDS device", href: "/kitchen/device", role: "KITCHEN" },
       { label: "Store settings", href: "/manage/settings", role: "ADMIN" },
       { label: "Staff", href: "/manage/staff", role: "ADMIN" },

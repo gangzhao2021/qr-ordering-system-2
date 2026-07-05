@@ -54,7 +54,9 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Review customer feedback and mark feedback reviewed or resolved.
 - Review member order, payment, coupon, and feedback history.
 - Review P1 pilot readiness across purchasing, inventory, costing, customers, and feedback.
-- DEV creates stores, assigns first ADMIN, switches store context, and reviews P2 platform readiness.
+- Review operating reports for revenue, refunds, discounts, taxes, service charge, menu performance, kitchen station performance, customer activity, coupon use, stock risk, and audit signals.
+- Filter audit history by date range, action, entity type, and actor.
+- DEV creates stores, assigns first ADMIN, switches store context, and reviews P2 platform/reporting readiness.
 
 ### Printer Service
 
@@ -66,7 +68,7 @@ A dine-in QR ordering system for small restaurants. Guests order from a table-sc
 - Live Stripe/Interac/WeChat Pay/Alipay capture and reconciliation.
 - Marketing automation and richer customer segmentation.
 - Supplier invoice reconciliation and advanced recipe costing.
-- Deeper analytics and reporting.
+- Cross-store fleet analytics and scheduled report delivery.
 - Fleet analytics and deeper multi-store operations.
 - Advanced KDS category routing and station load balancing.
 

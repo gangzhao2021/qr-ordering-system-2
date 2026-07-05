@@ -75,7 +75,7 @@ export default function P2SmokeCockpitPage() {
               <h1>P2 smoke cockpit</h1>
               <p>
                 Platform readiness for multi-store onboarding, store switching,
-                and tenant isolation.
+                KDS devices, reporting, and audit traceability.
               </p>
             </div>
             <button className="btn primary" onClick={() => void refresh()}>
@@ -133,6 +133,18 @@ export default function P2SmokeCockpitPage() {
           <article className="card metric-card">
             <span className="meta">KDS stations</span>
             <strong>{data?.summary.kdsStations ?? 0}</strong>
+          </article>
+          <article className="card metric-card">
+            <span className="meta">Report payments</span>
+            <strong>{data?.summary.reportingPayments ?? 0}</strong>
+          </article>
+          <article className="card metric-card">
+            <span className="meta">Audit entries</span>
+            <strong>{data?.summary.reportingAuditLogs ?? 0}</strong>
+          </article>
+          <article className="card metric-card">
+            <span className="meta">Low stock</span>
+            <strong>{data?.summary.reportingLowStockItems ?? 0}</strong>
           </article>
         </section>
 

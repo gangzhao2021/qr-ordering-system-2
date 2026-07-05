@@ -31,6 +31,7 @@
     "smoke:p1-feedback": "node scripts/smoke-p1-feedback.mjs",
     "smoke:p2-kds": "node scripts/smoke-p2-kds.mjs",
     "smoke:p2-multistore": "node scripts/smoke-p2-multistore.mjs",
+    "smoke:p2-reporting": "node scripts/smoke-p2-reporting.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

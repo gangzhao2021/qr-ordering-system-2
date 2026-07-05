@@ -53,6 +53,10 @@ FOH checkout closes all submitted orders for a table only when no order items ar
 
 Management analytics is computed from existing transactional data, not a separate warehouse. Revenue uses `Payment.paidAt`; order counts use `Order.submittedAt`; top items aggregate non-canceled `OrderItem` quantity and item sales. The report supports 7, 14, and 31 day windows.
 
+P2 reporting expands the same store-scoped read model instead of adding a new reporting database. `/v1/manage/analytics` aggregates payments, refunds, discounts, order totals, taxes, service charges, menu categories, kitchen stations, member payments, coupon redemptions, feedback ratings, menu item stock risk, recipe margin, and audit action counts for the current store. DEV may inspect another store with `x-store-id`; non-DEV users stay on their session store.
+
+`/v1/manage/audit-logs` exposes filterable audit history for the current store with range, action, entity type, actor, and limit filters. Audit records are intentionally lightweight: action, entity type/id, optional actor email, metadata JSON, and timestamp. The dedicated `/manage/audit` page uses those filters while `/manage/operations` keeps a short recent-audit preview.
+
 ## Menu Stock
 
 Menu item stock is stored directly on `MenuItem`. A `null` stock quantity means unlimited or untracked stock; `0` means sold out. Public menus include available sold-out items so customers can see them, but the cart disables them. Order submission validates aggregated item quantity and conditionally decrements stock in the same transaction as order and print-job creation. FOH canceling a tracked order item restores stock; restoring a canceled item checks and decrements stock again.
@@ -79,11 +83,11 @@ P1 recipe costing adds `Ingredient`, `Recipe`, and `RecipeLine` records. Managem
 
 The P1 smoke cockpit aggregates store-operations readiness from existing transactional tables rather than storing separate state. It reports supplier, purchase order, stocktake, ingredient, recipe, member, coupon, and feedback coverage, and links managers to the same operational surfaces used during smoke verification.
 
-The P2 smoke cockpit aggregates platform readiness from existing store, user, table, and menu rows. It reports store count, active manager coverage, table bootstrap coverage, menu setup coverage, and regression commands.
+The P2 smoke cockpit aggregates platform readiness from existing store, user, table, menu, KDS, payment, inventory, and audit rows. It reports store count, active manager coverage, table bootstrap coverage, menu setup coverage, KDS readiness, reporting/audit readiness, and regression commands.
 
 KDS device records provide token and station inventory for device setup. Staff-session `/kitchen` remains a read-only operations board for managers and kitchen staff. Token-scoped `/v1/kds/*` endpoints let a configured device read only its station's pending items and send heartbeat updates without a staff session. Invalid, inactive, or rotated device tokens cannot read pending work. Management operations can copy device links, rotate tokens, and review `lastSeenAt` as an online/offline signal.
 
-The P2 smoke cockpit includes KDS active device count, online heartbeat count, and station assignment coverage. `pnpm smoke:p2-kds` proves token auth, station filtering, heartbeat, inactive-token rejection, and token rotation.
+The P2 smoke cockpit includes KDS active device count, online heartbeat count, station assignment coverage, reporting payment count, reporting revenue, audit entry count, and low-stock risk count. `pnpm smoke:p2-kds` proves token auth, station filtering, heartbeat, inactive-token rejection, and token rotation. `pnpm smoke:p2-reporting` proves operating reports, audit filters, inventory risk, and reporting store isolation.
 
 ## Table Management
 
